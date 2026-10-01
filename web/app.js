@@ -5,9 +5,11 @@ import {
   ManualInputState,
 } from "./manual-input.js";
 import { HttpTransport, MockSerialTransport, SerialTransport } from "./serial-transport.js";
+import { MacroPage } from "./macro-page.js";
 
 const elements = {
   connectionButton: document.querySelector('[data-testid="connect-button"]'),
+  headerConnectionButton: document.querySelector('[data-testid="header-connect-button"]'),
   startButton: document.querySelector('[data-testid="start-button"]'),
   stopButton: document.querySelector('[data-testid="stop-button"]'),
   statusBadge: document.querySelector('[data-testid="status-badge"]'),
@@ -19,6 +21,8 @@ const elements = {
   errorText: document.querySelector('[data-testid="error-text"]'),
   durationText: document.querySelector('[data-testid="duration-text"]'),
   manualStatus: document.querySelector('[data-testid="manual-status"]'),
+  heroSteps: document.querySelector('[data-testid="hero-steps"]'),
+  factSteps: document.querySelector('[data-testid="macro-fact-steps"]'),
 };
 const manualButtons = [
   ...document.querySelectorAll("button[data-control]"),
@@ -38,7 +42,15 @@ let currentStep = 0;
 let stepCount = 48;
 let pollTimer = null;
 let activeManualControls = new Set();
+let pendingReply = null;
+let currentRoute = "home";
 const manualInputState = new ManualInputState(onManualInputChange);
+const macroPage = new MacroPage({
+  request: requestDevice,
+  isConnected: () => connected,
+  isRunning: () => deviceState === "running",
+  refreshStatus: () => transport?.send("STATUS"),
+});
 
 elements.durationText.textContent = formatDuration(63595);
 
@@ -52,6 +64,9 @@ function render() {
   const running = connected && deviceState === "running" && !manualActive;
   elements.connectionButton.textContent = connected ? "断开设备" : "连接手柄";
   elements.connectionButton.disabled = busy || !transportSupported;
+  elements.headerConnectionButton.textContent = connected ? "设备已连接" : "连接设备";
+  elements.headerConnectionButton.dataset.connected = String(connected);
+  elements.headerConnectionButton.disabled = busy || !transportSupported;
   elements.startButton.disabled = busy || !connected || running || manualActive;
   elements.stopButton.disabled = busy || !connected || !running;
   for (const button of manualButtons) {
@@ -108,6 +123,9 @@ function render() {
   elements.stepText.textContent = running
     ? `${currentStep} / ${stepCount}`
     : `0 / ${stepCount}`;
+  elements.heroSteps.textContent = `${stepCount} STEPS`;
+  elements.factSteps.textContent = stepCount;
+  macroPage.renderControls();
 }
 
 function applyDeviceMessage(message) {
@@ -134,7 +152,49 @@ function applyDeviceMessage(message) {
 }
 
 function onLine(line) {
-  applyDeviceMessage(parseDeviceLine(line));
+  const message = parseDeviceLine(line);
+  if (!message) return;
+  if (pendingReply) {
+    if (message.type === "error") {
+      const pending = pendingReply;
+      pendingReply = null;
+      clearTimeout(pending.timer);
+      pending.reject(new Error(message.message));
+    } else if (message.type === pendingReply.expected) {
+      const pending = pendingReply;
+      pendingReply = null;
+      clearTimeout(pending.timer);
+      pending.resolve(message);
+    }
+  }
+  applyDeviceMessage(message);
+}
+
+function requestDevice(command, expected) {
+  if (!connected || !transport) return Promise.reject(new Error("请先连接设备。"));
+  if (pendingReply) return Promise.reject(new Error("设备正在处理上一条命令。"));
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      pendingReply = null;
+      reject(new Error("设备响应超时，请确认连接后重试。"));
+    }, 10000);
+    pendingReply = { expected, resolve, reject, timer };
+    transport.send(command).catch((error) => {
+      if (pendingReply?.timer === timer) {
+        pendingReply = null;
+        clearTimeout(timer);
+        reject(error);
+      }
+    });
+  });
+}
+
+function rejectPendingReply(message) {
+  if (!pendingReply) return;
+  const pending = pendingReply;
+  pendingReply = null;
+  clearTimeout(pending.timer);
+  pending.reject(new Error(message));
 }
 
 function onManualInputChange(activeControls) {
@@ -159,9 +219,11 @@ function onManualInputChange(activeControls) {
 function onUnexpectedDisconnect(error) {
   connected = false;
   busy = false;
+  rejectPendingReply("设备连接已断开。");
   clearInterval(pollTimer);
   pollTimer = null;
   manualInputState.clear();
+  macroPage.setConnection();
   setError(error?.message || "设备连接意外断开");
   render();
 }
@@ -178,8 +240,11 @@ async function connect() {
     await transport.connect();
     connected = true;
     await transport.send("HELLO");
+    macroPage.setConnection();
     pollTimer = window.setInterval(() => {
-      transport?.send("STATUS").catch(onUnexpectedDisconnect);
+      if (!pendingReply && !macroPage.busy) {
+        transport?.send("STATUS").catch(onUnexpectedDisconnect);
+      }
     }, 1000);
   } catch (error) {
     connected = false;
@@ -196,6 +261,8 @@ async function disconnect() {
   clearInterval(pollTimer);
   pollTimer = null;
   manualInputState.clear();
+  connected = false;
+  rejectPendingReply("设备已断开。");
   render();
   try {
     await transport?.disconnect();
@@ -205,6 +272,7 @@ async function disconnect() {
     connected = false;
     transport = null;
     busy = false;
+    macroPage.setConnection();
     render();
   }
 }
@@ -223,13 +291,15 @@ async function sendCommand(command) {
   }
 }
 
-elements.connectionButton.addEventListener("click", () => {
+function toggleConnection() {
   if (connected) {
     disconnect();
   } else {
     connect();
   }
-});
+}
+elements.connectionButton.addEventListener("click", toggleConnection);
+elements.headerConnectionButton.addEventListener("click", toggleConnection);
 elements.startButton.addEventListener("click", () => sendCommand("START"));
 elements.stopButton.addEventListener("click", () => sendCommand("STOP"));
 
@@ -297,6 +367,8 @@ window.addEventListener("keydown", (event) => {
     !control ||
     !connected ||
     busy ||
+    currentRoute !== "home" ||
+    event.target?.closest?.("input,select,textarea,[contenteditable]") ||
     event.metaKey ||
     event.ctrlKey ||
     event.altKey
@@ -323,6 +395,25 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+function renderRoute() {
+  const route = window.location.hash.slice(1) || "/";
+  currentRoute = route === "/macros/1" ? "macro-edit" :
+    route === "/macros" ? "macros" : "home";
+  if (currentRoute !== "home") manualInputState.clear();
+  for (const view of document.querySelectorAll("[data-route-view]")) {
+    view.hidden = view.dataset.routeView !== currentRoute;
+  }
+  for (const link of document.querySelectorAll("[data-nav]")) {
+    if (link.dataset.nav === (currentRoute === "home" ? "home" : "macros")) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  }
+  macroPage.setRoute(currentRoute);
+}
+window.addEventListener("hashchange", renderRoute);
+
 if (!transportSupported) {
   elements.connectionButton.disabled = true;
   elements.browserNote.textContent =
@@ -340,6 +431,7 @@ if (!transportSupported) {
 }
 
 render();
+renderRoute();
 if (wifiMode) {
   connect();
 }

@@ -23,6 +23,8 @@ class MacroEngine {
   MacroEngine(const MacroStep* steps, size_t stepCount, uint32_t loopGapMs,
               bool repeat);
 
+  void configure(const MacroStep* steps, size_t stepCount, uint32_t loopGapMs,
+                 bool repeat);
   void start(uint32_t nowMs);
   void stop();
   void tick(uint32_t nowMs);

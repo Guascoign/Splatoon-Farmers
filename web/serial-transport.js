@@ -1,4 +1,6 @@
-import { DEVICE_BAUD_RATE } from "./protocol.js";
+import { DEVICE_BAUD_RATE, parseDeviceLine } from "./protocol.js";
+import { macroChecksum } from "./macro-editor.js";
+import { MOCK_BUILTIN_STEPS } from "./mock-macro.js";
 
 // The page served by the ESP32 uses the same commands as the USB-UART link.
 // HTTP works in mobile browsers, where Web Serial is generally unavailable.
@@ -31,7 +33,7 @@ export class HttpTransport {
       });
       const line = (await response.text()).trim();
       if (!response.ok || line.startsWith("ERR")) {
-        throw new Error(line || `设备返回 HTTP ${response.status}`);
+        throw new Error(parseDeviceLine(line)?.message || line || `设备返回 HTTP ${response.status}`);
       }
       if (line) {
         this.onLine(line);
@@ -184,6 +186,11 @@ export class MockSerialTransport {
     this.step = 0;
     this.cycle = 0;
     this.lastReport = null;
+    this.macroSteps = MOCK_BUILTIN_STEPS.map((step) => [...step]);
+    this.macroGap = 2585;
+    this.macroColor = 0;
+    this.macroSource = "builtin";
+    this.staged = null;
   }
 
   static isSupported() {
@@ -214,6 +221,65 @@ export class MockSerialTransport {
       this.emit("status");
     } else if (command === "PING") {
       this.onLine("PONG");
+    } else if (command === "MACRO_LIST") {
+      const duration = this.macroSteps.reduce((total, step) => total + step[0], 0);
+      this.onLine(JSON.stringify({ type: "macro_list", ok: true, storage: "ready",
+        slots: [{ slot: 0, name: "素材远征", source: this.macroSource,
+          steps: this.macroSteps.length, duration_ms: duration,
+          loop_gap_ms: this.macroGap, color: this.macroColor }] }));
+    } else if (command === "MACRO_GET") {
+      this.onLine(JSON.stringify({ type: "macro", ok: true, slot: 0,
+        source: this.macroSource, loop_gap_ms: this.macroGap,
+        color: this.macroColor, steps: this.macroSteps }));
+    } else if (command === "MACRO_ABORT") {
+      this.staged = null;
+      this.onLine("OK");
+    } else if (command === "MACRO_RESTORE") {
+      this.macroSteps = MOCK_BUILTIN_STEPS.map((step) => [...step]);
+      this.macroGap = 2585;
+      this.macroColor = 0;
+      this.macroSource = "builtin";
+      this.onLine("OK");
+    } else if (command === "MACRO_STORAGE_FORMAT") {
+      this.onLine("ERR storage-already-ready");
+    } else if (command.startsWith("MACRO_BEGIN ")) {
+      const values = command.split(" ").slice(1).map(Number);
+      if (values.length !== 3 || values.some((value) => !Number.isInteger(value)) ||
+          values[0] < 1 || values[0] > 128 || values[1] < 0 || values[1] > 600000 ||
+          values[2] < 0 || values[2] > 5) {
+        this.onLine("ERR invalid-macro-begin");
+      } else {
+        this.staged = { steps: Array(values[0]).fill(null), loopGapMs: values[1], color: values[2] };
+        this.onLine("OK");
+      }
+    } else if (command.startsWith("MACRO_STEP ")) {
+      const values = command.split(" ").slice(1).map(Number);
+      if (!this.staged || values.length !== 8 || values.some((value) => !Number.isInteger(value)) ||
+          values[0] < 0 || values[0] >= this.staged.steps.length) {
+        this.onLine("ERR invalid-macro-step");
+      } else {
+        this.staged.steps[values[0]] = values.slice(1);
+        this.onLine("OK");
+      }
+    } else if (command.startsWith("MACRO_COMMIT ")) {
+      if (!this.staged || this.staged.steps.some((step) => !step)) {
+        this.onLine("ERR missing-macro-step");
+      } else {
+        const macro = { ...this.staged, steps: this.staged.steps.map(
+          ([durationMs, buttons, dpad, leftX, leftY, rightX, rightY]) =>
+            ({ durationMs, buttons, dpad, leftX, leftY, rightX, rightY }),
+        ) };
+        if (macroChecksum(macro) !== Number(command.split(" ")[1])) {
+          this.onLine("ERR macro-checksum");
+        } else {
+          this.macroSteps = this.staged.steps.map((step) => [...step]);
+          this.macroGap = this.staged.loopGapMs;
+          this.macroColor = this.staged.color;
+          this.macroSource = "flash";
+          this.staged = null;
+          this.onLine("OK");
+        }
+      }
     } else if (/^R \d+ \d+ \d+ \d+ \d+ \d+$/.test(command)) {
       this.state = "idle";
       this.phase = "idle";
@@ -240,11 +306,14 @@ export class MockSerialTransport {
         state: this.state,
         phase: this.phase,
         step: this.step,
-        steps: 48,
+        steps: this.macroSteps.length,
         cycle: this.cycle,
-        duration_ms: 61010,
-        loop_gap_ms: 2585,
-        cycle_ms: 63595,
+        duration_ms: this.macroSteps.reduce((total, step) => total + step[0], 0),
+        loop_gap_ms: this.macroGap,
+        cycle_ms: this.macroSteps.reduce((total, step) => total + step[0], 0) + this.macroGap,
+        source: this.macroSource,
+        color: this.macroColor,
+        macro_storage: "ready",
       }),
     );
   }

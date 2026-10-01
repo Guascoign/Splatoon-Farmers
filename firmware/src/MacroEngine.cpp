@@ -16,6 +16,15 @@ MacroEngine::MacroEngine(const MacroStep* steps, size_t stepCount,
       report_(kNeutralReport),
       reportChanged_(false) {}
 
+void MacroEngine::configure(const MacroStep* steps, size_t stepCount,
+                            uint32_t loopGapMs, bool repeat) {
+  stop();
+  steps_ = steps;
+  stepCount_ = stepCount;
+  loopGapMs_ = loopGapMs;
+  repeat_ = repeat;
+}
+
 void MacroEngine::start(uint32_t nowMs) {
   cycleCount_ = 0;
   stepIndex_ = 0;

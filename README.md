@@ -25,6 +25,10 @@ Required gears described in this video: [Bilibili](https://www.bilibili.com/vide
   control page at <http://192.168.9.1> without a computer or internet.
 - Continues a running loop if the browser, Wi-Fi, or USB-UART connection drops.
 - Starts, stops, and reports progress through Wi-Fi HTTP or Web Serial.
+- Exposes one editable macro slot. The compiled 48-step routine is the fallback;
+  a saved Flash version takes priority on the next boot.
+- Uses the onboard GPIO48 WS2812 to show startup, connection, running macro,
+  and controller output states.
 - Provides every digital controller button and D-pad direction for mouse,
   touch, and keyboard input.
 - Leaves both analog sticks centered during manual input.
@@ -103,6 +107,28 @@ secure context, so opening `web/index.html` directly is not supported.
 3. Select **开始刷取**. The routine restarts at step 1 and loops until stopped.
 4. Select **停止** to immediately send a neutral controller report.
 
+### Edit the board macro
+
+Open **宏设置** from the top navigation on the onboard page or the desktop
+Web Serial page. Slot 01 shows the active source, action count, cycle duration,
+and light color. Open it to inspect every action and adjust held buttons,
+D-pad, sticks, duration, loop gap, and one of six fixed running colors. Steps
+can be added, copied, reordered, or deleted. **保存到 Flash** uploads the full
+macro transaction with a checksum; saving is disabled while the routine runs.
+
+The Flash override is stored as `/material-farm-slot-1.bin` in SPIFFS with a
+backup record. **恢复内置** removes this override and returns to the compiled
+48-step routine. Firmware never formats SPIFFS on boot. If mounting fails,
+the built-in routine still runs; **初始化宏存储** is offered only in that case
+and explicitly warns that formatting erases the entire SPIFFS partition,
+including data from other firmware previously used on the board.
+
+The status LED is red briefly after power-on. It blinks yellow while no phone
+is associated and no active serial command stream is present, then stays yellow
+while a phone is connected to the hotspot or the desktop page is polling over
+serial. During a run it blinks in the slot's selected color. An active HID
+report briefly flashes green. The light uses GPIO48, as on the N16R8 board.
+
 Losing Wi-Fi or USB-UART does not stop an already running routine. Reconnect and
 stop it, reset the board, or remove power when you need to end it.
 
@@ -136,6 +162,12 @@ receives a single response. Both control paths act on the same macro state.
 | `STATUS` | Return phase, step, cycle count, and timing |
 | `PING` | Return `PONG` |
 | `R buttons dpad lx ly rx ry` | Stop the routine and send one complete HID report |
+| `MACRO_LIST` / `MACRO_GET` | Read the single slot summary or complete action list |
+| `MACRO_BEGIN count gap color` | Start a staged upload for slot 01 |
+| `MACRO_STEP index duration buttons dpad lx ly rx ry` | Set one staged action |
+| `MACRO_COMMIT checksum` / `MACRO_ABORT` | Validate and save, or cancel a staged upload |
+| `MACRO_RESTORE` | Remove only this slot's Flash override |
+| `MACRO_STORAGE_FORMAT` | Explicitly format SPIFFS only after a mount failure |
 
 The raw report command keeps the firmware useful for future computer-loaded
 routines without changing the board protocol.
@@ -159,9 +191,11 @@ Project layout:
 
 - `firmware/include/MaterialFarmMacro.h` — board-resident routine
 - `firmware/src/MacroEngine.cpp` — non-blocking loop engine
+- `firmware/src/MacroSlotStorage.cpp` — one-slot checked SPIFFS override
+- `firmware/src/StatusLed.cpp` — nonblocking GPIO48 RGB status light
 - `firmware/src/main.cpp` — USB HID, serial/HTTP protocol, Wi-Fi, and main loop
 - `scripts/embed_web_assets.py` — compresses and embeds the web page at build time
-- `web/` — dependency-free phone HTTP and desktop Web Serial console
+- `web/` — dependency-free phone HTTP and desktop Web Serial console, macro editor
 - `tests/` — host-side firmware and browser-logic tests
 
 ## License and disclaimer

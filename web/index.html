@@ -10,6 +10,7 @@
     />
     <title>Splatoon Farmers · Material Raid Console</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./macro-editor.css" />
   </head>
   <body>
     <div class="ambient-ink ambient-ink-teal" aria-hidden="true"></div>
@@ -17,7 +18,7 @@
 
     <main class="page-shell">
       <header class="topbar">
-        <a class="brand" href="./" aria-label="Splatoon Farmers 首页">
+        <a class="brand" href="#/" aria-label="Splatoon Farmers 首页">
           <span class="brand-mark" aria-hidden="true">
             <span>SF</span>
           </span>
@@ -26,12 +27,16 @@
             <small>Material Raid Console</small>
           </span>
         </a>
-        <div class="hardware-label">
-          <span class="live-pip" aria-hidden="true"></span>
-          ESP32-S3 · WIRED HID
+        <div class="topbar-actions">
+          <nav class="page-nav" aria-label="页面导航">
+            <a href="#/" data-nav="home">控制台</a>
+            <a href="#/macros" data-nav="macros">宏设置</a>
+          </nav>
+          <button class="header-connect" type="button" data-testid="header-connect-button">连接设备</button>
         </div>
       </header>
 
+      <div data-route-view="home">
       <section class="hero" aria-labelledby="page-title">
         <div class="intro">
           <div class="hero-sticker">SOLO MATERIAL RUN</div>
@@ -46,7 +51,7 @@
           </p>
           <div class="hero-tags" aria-label="功能摘要">
             <span>BOARD-RESIDENT</span>
-            <span>48 STEPS</span>
+            <span data-testid="hero-steps">48 STEPS</span>
             <span>∞ LOOP</span>
           </div>
         </div>
@@ -71,7 +76,7 @@
           <div class="macro-facts" aria-label="脚本信息">
             <div>
               <span>STEPS / 步骤</span>
-              <strong>48</strong>
+              <strong data-testid="macro-fact-steps">48</strong>
             </div>
             <div>
               <span>CYCLE / 单轮</span>
@@ -418,6 +423,66 @@
             </div>
           </li>
         </ol>
+      </section>
+
+      </div>
+
+      <section class="macro-page" data-route-view="macros" hidden aria-labelledby="macros-title">
+        <div class="macro-page-head">
+          <p class="eyebrow">BOARD MACRO / 板载宏</p>
+          <h1 id="macros-title">一格宏位，<span>整轮都在板上跑。</span></h1>
+          <p>查看素材远征的每一步。修改动作、保持时间、循环间隔和运行灯色后，可保存到板载 Flash；断开网页也能继续执行。</p>
+        </div>
+        <p class="macro-message" data-testid="macro-list-message" role="status">连接设备后读取宏槽位。</p>
+        <article class="macro-slot-card">
+          <div class="macro-slot-id"><small>SLOT</small><strong>01</strong></div>
+          <div class="macro-slot-main">
+            <p class="eyebrow">MATERIAL RAID / 素材远征</p>
+            <h2>素材远征 · 自动循环</h2>
+            <span data-testid="macro-source">内置宏</span>
+          </div>
+          <div class="macro-slot-facts">
+            <div><small>动作</small><strong data-testid="macro-list-steps">48</strong></div>
+            <div><small>单轮</small><strong data-testid="macro-list-duration">01:03.595</strong></div>
+            <div><small>灯色</small><strong><i class="macro-color-dot" data-testid="macro-list-color"></i><span data-testid="macro-list-color-name">紫色</span></strong></div>
+          </div>
+          <a class="button button-primary macro-enter" href="#/macros/1">进入编辑 →</a>
+        </article>
+        <div class="macro-tip">
+          <strong>Flash 覆盖规则</strong>
+          <p>保存后优先运行 Flash 版本；恢复内置宏只移除这一格的自定义覆盖。存储挂载失败时仍可运行内置宏。</p>
+        </div>
+        <button class="button button-secondary" type="button" data-testid="macro-format-button" hidden>初始化宏存储</button>
+      </section>
+
+      <section class="macro-page" data-route-view="macro-edit" hidden aria-labelledby="macro-edit-title">
+        <div class="macro-page-head">
+          <a class="macro-back" href="#/macros">← 返回宏列表</a>
+          <p class="eyebrow">SLOT 01 / STEP EDITOR</p>
+          <h1 id="macro-edit-title">微调每一步，<span>保存整轮节奏。</span></h1>
+          <p>按键、方向、摇杆和保持时间都能修改。中立等待也是一个动作；保存前可以上移、复制或插入动作。</p>
+        </div>
+        <p class="macro-message" data-testid="macro-edit-message" role="status">连接设备后读取宏内容。</p>
+        <div class="macro-editor-card">
+          <fieldset class="macro-editor-fields" data-testid="macro-edit-fields">
+          <div class="macro-editor-meta">
+            <label><span>整轮结束后等待</span><div class="input-unit"><input type="number" min="0" max="600000" step="10" data-testid="macro-loop-gap"><small>ms</small></div></label>
+            <div class="macro-editor-summary"><span>当前草稿</span><strong data-testid="macro-edit-summary">48 个动作</strong></div>
+          </div>
+          <fieldset class="macro-color-field">
+            <legend>运行时灯光颜色</legend>
+            <p>刷取时按所选颜色闪烁；每次有操作输出，会短闪一次绿色。</p>
+            <div class="macro-color-options" data-testid="macro-color-options"></div>
+          </fieldset>
+          <div class="macro-steps-head"><h2>动作列表</h2><span>点击动作展开微调</span></div>
+          <div class="macro-step-list" data-testid="macro-step-list"></div>
+          </fieldset>
+          <div class="macro-editor-actions">
+            <button class="button button-secondary" type="button" data-testid="macro-add-step">＋ 添加动作</button>
+            <button class="button button-stop" type="button" data-testid="macro-restore">恢复内置</button>
+            <button class="button button-primary" type="button" data-testid="macro-save">保存到 Flash</button>
+          </div>
+        </div>
       </section>
 
       <footer>
