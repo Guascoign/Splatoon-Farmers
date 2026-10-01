@@ -22,6 +22,7 @@ export const DEFAULT_BINDINGS = Object.freeze({
   DOWN: "DPAD_DOWN", LEFT: "DPAD_LEFT",
   GUIDE: "HOME", SHARE: "CAPTURE",
 });
+export const DEFAULT_STICK_BINDINGS = Object.freeze({ left: "left", right: "right" });
 const GAMEPAD_BUTTON_KEYS = Object.freeze([
   "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "VIEW", "MENU",
   "LS", "RS", "UP", "DOWN", "LEFT", "RIGHT", "GUIDE", "SHARE",
@@ -34,6 +35,18 @@ export function normalizedBindings(raw) {
     if (raw && Object.hasOwn(raw, key) &&
         (raw[key] === null || SWITCH_KEYS.includes(raw[key]))) result[key] = raw[key];
   }
+  return result;
+}
+
+export function normalizedStickBindings(raw) {
+  const result = { ...DEFAULT_STICK_BINDINGS };
+  for (const side of ["left", "right"]) {
+    if (raw && Object.hasOwn(raw, side) &&
+        (raw[side] === null || raw[side] === "left" || raw[side] === "right")) {
+      result[side] = raw[side];
+    }
+  }
+  if (result.left && result.left === result.right) return { ...DEFAULT_STICK_BINDINGS };
   return result;
 }
 
@@ -73,7 +86,8 @@ function dpadValue(controls) {
   return values[`${horizontal},${vertical}`];
 }
 
-export function xboxToReport(pad, bindings = DEFAULT_BINDINGS) {
+export function xboxToReport(pad, bindings = DEFAULT_BINDINGS,
+                             stickBindings = DEFAULT_STICK_BINDINGS) {
   let buttons = 0;
   const controls = new Set();
   for (const source of xboxPressedKeys(pad)) {
@@ -83,15 +97,33 @@ export function xboxToReport(pad, bindings = DEFAULT_BINDINGS) {
   for (const control of controls) {
     if (Object.hasOwn(BUTTON_BITS, control)) buttons |= 1 << BUTTON_BITS[control];
   }
-  return {
-    buttons, dpad: dpadValue(controls),
-    leftX: axisByte(pad.axes[0]), leftY: axisByte(pad.axes[1]),
-    rightX: axisByte(pad.axes[2]), rightY: axisByte(pad.axes[3]),
-  };
+  const report = { ...NEUTRAL_REPORT, buttons, dpad: dpadValue(controls) };
+  for (const source of ["left", "right"]) {
+    const target = stickBindings[source];
+    if (target !== "left" && target !== "right") continue;
+    const offset = source === "left" ? 0 : 2;
+    report[`${target}X`] = axisByte(pad.axes[offset]);
+    report[`${target}Y`] = axisByte(pad.axes[offset + 1]);
+  }
+  return report;
 }
 
 export function reportsEqual(left, right) {
   return REPORT_FIELDS.every((field) => left?.[field] === right?.[field]);
+}
+
+export function digitalChanged(left, right) {
+  return left?.buttons !== right?.buttons || left?.dpad !== right?.dpad;
+}
+
+export function axisDifference(left, right) {
+  return Math.max(...["leftX", "leftY", "rightX", "rightY"]
+    .map((field) => Math.abs((left?.[field] ?? 128) - (right?.[field] ?? 128))));
+}
+
+function axisActive(report) {
+  return ["leftX", "leftY", "rightX", "rightY"]
+    .some((field) => report[field] !== 128);
 }
 
 export function reportCommand(report) {
@@ -118,15 +150,17 @@ export class XboxRecorder {
     this.startedAt = 0;
     this.since = 0;
     this.hasAction = false;
+    this.sampleIntervalMs = 220;
   }
 
-  start(report, now) {
+  start(report, now, sampleIntervalMs = 220) {
     this.reset();
     this.active = true;
     this.current = { ...report };
     this.startedAt = now;
     this.since = now;
     this.hasAction = !reportsEqual(report, NEUTRAL_REPORT);
+    this.sampleIntervalMs = Math.max(80, Math.min(350, Number(sampleIntervalMs) || 220));
   }
 
   appendUntil(now) {
@@ -141,8 +175,13 @@ export class XboxRecorder {
     return true;
   }
 
-  record(report, now) {
+  record(report, now, force = false) {
     if (!this.active || reportsEqual(report, this.current)) return true;
+    const digitalEdge = digitalChanged(report, this.current);
+    const stickStartedOrStopped = axisActive(report) !== axisActive(this.current);
+    if (!digitalEdge && !stickStartedOrStopped &&
+        (axisDifference(report, this.current) < 20 ||
+         (!force && now - this.since < this.sampleIntervalMs))) return true;
     // Reserve one final step for the state currently held by the controller.
     if (this.steps.length >= MAX_MACRO_STEPS - 1) return false;
     if (!this.appendUntil(now) || this.steps.length >= MAX_MACRO_STEPS) return false;

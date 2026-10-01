@@ -428,8 +428,10 @@
                 <button type="button" class="pad-key key-rt" data-source-key="RT">RT</button>
                 <button type="button" class="pad-key key-lb" data-source-key="LB">LB</button>
                 <button type="button" class="pad-key key-rb" data-source-key="RB">RB</button>
-                <button type="button" class="pad-key key-ls stick-key" data-source-key="LS" aria-label="按下左摇杆 LS">LS</button>
-                <button type="button" class="pad-key key-rs stick-key" data-source-key="RS" aria-label="按下右摇杆 RS">RS</button>
+                <button type="button" class="pad-key key-ls stick-key" data-source-stick="left" aria-label="Xbox 左摇杆方向"><span class="stick-dot" aria-hidden="true"></span><span class="stick-caption">左摇杆</span></button>
+                <button type="button" class="pad-key key-rs stick-key" data-source-stick="right" aria-label="Xbox 右摇杆方向"><span class="stick-dot" aria-hidden="true"></span><span class="stick-caption">右摇杆</span></button>
+                <button type="button" class="pad-key key-ls-press press-key" data-source-key="LS" aria-label="Xbox 左摇杆按下">L3</button>
+                <button type="button" class="pad-key key-rs-press press-key" data-source-key="RS" aria-label="Xbox 右摇杆按下">R3</button>
                 <button type="button" class="pad-key key-up dpad-key" data-source-key="UP">↑</button>
                 <button type="button" class="pad-key key-right dpad-key" data-source-key="RIGHT">→</button>
                 <button type="button" class="pad-key key-down dpad-key" data-source-key="DOWN">↓</button>
@@ -451,8 +453,10 @@
                 <button type="button" class="pad-key key-rt" data-target-key="ZR">ZR</button>
                 <button type="button" class="pad-key key-lb" data-target-key="L">L</button>
                 <button type="button" class="pad-key key-rb" data-target-key="R">R</button>
-                <button type="button" class="pad-key key-ls stick-key" data-target-key="L_STICK_PRESS" aria-label="按下左摇杆">L</button>
-                <button type="button" class="pad-key key-rs stick-key" data-target-key="R_STICK_PRESS" aria-label="按下右摇杆">R</button>
+                <button type="button" class="pad-key key-ls stick-key" data-target-stick="left" aria-label="Switch 左摇杆方向"><span class="stick-dot" aria-hidden="true"></span><span class="stick-caption">左摇杆</span></button>
+                <button type="button" class="pad-key key-rs stick-key" data-target-stick="right" aria-label="Switch 右摇杆方向"><span class="stick-dot" aria-hidden="true"></span><span class="stick-caption">右摇杆</span></button>
+                <button type="button" class="pad-key key-ls-press press-key" data-target-key="L_STICK_PRESS" aria-label="Switch 左摇杆按下">L3</button>
+                <button type="button" class="pad-key key-rs-press press-key" data-target-key="R_STICK_PRESS" aria-label="Switch 右摇杆按下">R3</button>
                 <button type="button" class="pad-key key-up dpad-key" data-target-key="DPAD_UP">↑</button>
                 <button type="button" class="pad-key key-right dpad-key" data-target-key="DPAD_RIGHT">→</button>
                 <button type="button" class="pad-key key-down dpad-key" data-target-key="DPAD_DOWN">↓</button>
@@ -468,7 +472,7 @@
               </div>
             </div>
           </div>
-          <p class="xbox-axis-note">摇杆方向固定为左对左、右对右；点击摇杆圆盘绑定的是摇杆按下键。Xbox 主键和分享键能否被网页读取取决于浏览器与驱动。</p>
+          <p class="xbox-axis-note">摇杆圆盘显示实时方向和幅度：点击左侧圆盘，再点击右侧圆盘可交换左右摇杆。摇杆按下键请点旁边的 L3 / R3。Xbox 主键和分享键能否被网页读取取决于浏览器与驱动。</p>
           <div class="xbox-binding-list" data-testid="xbox-binding-list" aria-label="当前键位映射"></div>
         </div>
 
@@ -480,8 +484,9 @@
             <button class="button button-secondary" type="button" data-testid="xbox-record" disabled>开始录制</button>
             <button class="button button-primary" type="button" data-testid="xbox-finish" disabled>结束录制并预览</button>
           </div>
+          <label class="xbox-record-setting"><span>画圈录制采样</span><select data-testid="xbox-record-interval"><option value="220" selected>标准 · 220 ms</option><option value="350">省步骤 · 350 ms</option><option value="80">精细 · 80 ms</option></select></label>
           <p class="xbox-record-info" data-testid="xbox-record-info" hidden></p>
-          <p class="xbox-save-note">录制停止后会打开槽位 01 草稿。检查动作和时长，再点“保存到 Flash”；最多 128 步。</p>
+          <p class="xbox-save-note">持续推住同一方向会合并成一个动作；画圈按所选间隔采样轨迹。录制停止后会打开槽位 01 草稿，检查后再保存到 Flash；最多 128 步。</p>
         </div>
       </section>
 

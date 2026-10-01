@@ -1,10 +1,13 @@
 import {
-  DEFAULT_BINDINGS, describeReport, NEUTRAL_REPORT, normalizedBindings,
-  reportCommand, reportsEqual, SWITCH_KEYS, XBOX_KEYS, XboxRecorder,
+  axisDifference, DEFAULT_BINDINGS, DEFAULT_STICK_BINDINGS, describeReport,
+  digitalChanged, NEUTRAL_REPORT, normalizedBindings, normalizedStickBindings,
+  reportCommand, SWITCH_KEYS, XBOX_KEYS, XboxRecorder,
   xboxGamepads, xboxPressedKeys, xboxToReport,
 } from "./xbox-input.js";
 
 const BINDINGS_KEY = "splatoon-farmers-xbox-bindings-v1";
+const STICK_BINDINGS_KEY = "splatoon-farmers-xbox-sticks-v1";
+const STICK_LABELS = { left: "左摇杆", right: "右摇杆" };
 const KEY_LABELS = Object.freeze({
   LB: "LB", RB: "RB", LT: "LT", RT: "RT", VIEW: "View", MENU: "Menu",
   LS: "左摇杆按下", RS: "右摇杆按下", UP: "方向上", RIGHT: "方向右",
@@ -20,6 +23,27 @@ function label(key) { return KEY_LABELS[key] || key; }
 function savedBindings() {
   try { return normalizedBindings(JSON.parse(localStorage.getItem(BINDINGS_KEY))); }
   catch { return { ...DEFAULT_BINDINGS }; }
+}
+
+function savedStickBindings() {
+  try { return normalizedStickBindings(JSON.parse(localStorage.getItem(STICK_BINDINGS_KEY))); }
+  catch { return { ...DEFAULT_STICK_BINDINGS }; }
+}
+
+function stickName(side) { return STICK_LABELS[side] || "未绑定"; }
+
+function stickMoving(report, side) {
+  return Math.abs(report[`${side}X`] - 128) >= 8 ||
+    Math.abs(report[`${side}Y`] - 128) >= 8;
+}
+
+function paintStick(button, report, side) {
+  const x = Math.round(((report[`${side}X`] - 128) / 127) * 14);
+  const y = Math.round(((report[`${side}Y`] - 128) / 127) * 14);
+  button.style.setProperty("--stick-x", `${x}px`);
+  button.style.setProperty("--stick-y", `${y}px`);
+  button.dataset.active = String(stickMoving(report, side));
+  button.setAttribute("aria-valuetext", `横向 ${report[`${side}X`]}，纵向 ${report[`${side}Y`]}`);
 }
 
 export class XboxPanel {
@@ -41,17 +65,21 @@ export class XboxPanel {
     this.stopTask = Promise.resolve();
     this.recorder = new XboxRecorder();
     this.bindings = savedBindings();
+    this.stickBindings = savedStickBindings();
     this.selectedSource = null;
+    this.selectedStick = null;
     this.selectedIndex = null;
     this.devicesSignature = "";
     this.lastReport = NEUTRAL_REPORT;
     this.lastHeartbeatAt = 0;
+    this.lastAnalogSendAt = 0;
     this.sendTail = Promise.resolve();
     this.frame = null;
     this.selector = document.querySelector('[data-testid="xbox-device"]');
     this.status = document.querySelector('[data-testid="xbox-status"]');
     this.output = document.querySelector('[data-testid="xbox-output"]');
     this.recordInfo = document.querySelector('[data-testid="xbox-record-info"]');
+    this.recordInterval = document.querySelector('[data-testid="xbox-record-interval"]');
     this.startButton = document.querySelector('[data-testid="xbox-start"]');
     this.stopButton = document.querySelector('[data-testid="xbox-stop"]');
     this.recordButton = document.querySelector('[data-testid="xbox-record"]');
@@ -64,17 +92,26 @@ export class XboxPanel {
     this.panel.hidden = !enabled;
 
     this.panel.addEventListener("click", (event) => {
+      const sourceStick = event.target.closest("[data-source-stick]")?.dataset.sourceStick;
+      const targetStick = event.target.closest("[data-target-stick]")?.dataset.targetStick;
       const source = event.target.closest("[data-source-key]")?.dataset.sourceKey;
       const target = event.target.closest("[data-target-key]")?.dataset.targetKey;
-      if (source) this.selectSource(source);
+      if (sourceStick) this.selectStick(sourceStick);
+      else if (targetStick) this.bindStickTarget(targetStick);
+      else if (source) this.selectSource(source);
       else if (target) this.bindTarget(target);
     });
-    this.unbindButton.addEventListener("click", () => this.bindTarget(null));
+    this.unbindButton.addEventListener("click", () => {
+      if (this.selectedStick) this.bindStickTarget(null);
+      else this.bindTarget(null);
+    });
     this.resetButton.addEventListener("click", () => {
       this.bindings = { ...DEFAULT_BINDINGS };
+      this.stickBindings = { ...DEFAULT_STICK_BINDINGS };
       this.selectedSource = null;
+      this.selectedStick = null;
       this.persistBindings();
-      this.bindingHint.textContent = "已恢复同位置映射：Xbox A → Switch B，Xbox B → Switch A。";
+      this.bindingHint.textContent = "已恢复同位置映射：Xbox A → Switch B，左右摇杆各自对应。";
       this.renderBindings();
     });
 
@@ -104,14 +141,47 @@ export class XboxPanel {
   }
 
   persistBindings() {
-    try { localStorage.setItem(BINDINGS_KEY, JSON.stringify(this.bindings)); }
+    try {
+      localStorage.setItem(BINDINGS_KEY, JSON.stringify(this.bindings));
+      localStorage.setItem(STICK_BINDINGS_KEY, JSON.stringify(this.stickBindings));
+    }
     catch { this.bindingHint.textContent = "浏览器未允许保存键位；本次页面中仍可使用。"; }
   }
 
   selectSource(source) {
     if (!XBOX_KEYS.includes(source)) return;
     this.selectedSource = source;
+    this.selectedStick = null;
     this.bindingHint.textContent = `Xbox ${label(source)} 当前对应 Switch ${label(this.bindings[source]) || "未绑定"}；点击右侧键位改绑。`;
+    this.renderBindings();
+  }
+
+  selectStick(side) {
+    if (side !== "left" && side !== "right") return;
+    this.selectedSource = null;
+    this.selectedStick = side;
+    this.bindingHint.textContent = `Xbox ${stickName(side)} 当前对应 Switch ${stickName(this.stickBindings[side])}；点击右侧摇杆圆盘改绑。`;
+    this.renderBindings();
+  }
+
+  bindStickTarget(target) {
+    if (!this.selectedStick) {
+      this.bindingHint.textContent = "请先点击左侧的 Xbox 摇杆圆盘。";
+      return;
+    }
+    if (target !== null && target !== "left" && target !== "right") return;
+    const source = this.selectedStick;
+    const previous = this.stickBindings[source];
+    const other = source === "left" ? "right" : "left";
+    if (target && this.stickBindings[other] === target) {
+      this.stickBindings[other] = previous;
+    }
+    this.stickBindings[source] = target;
+    this.selectedStick = null;
+    this.persistBindings();
+    this.bindingHint.textContent = target
+      ? `已绑定：Xbox ${stickName(source)} → Switch ${stickName(target)}。`
+      : `已取消 Xbox ${stickName(source)} 的摇杆方向输出。`;
     this.renderBindings();
   }
 
@@ -132,7 +202,7 @@ export class XboxPanel {
   }
 
   renderBindings() {
-    this.unbindButton.disabled = !this.selectedSource;
+    this.unbindButton.disabled = !this.selectedSource && !this.selectedStick;
     for (const button of this.panel.querySelectorAll("[data-source-key]")) {
       button.dataset.selected = String(button.dataset.sourceKey === this.selectedSource);
       button.title = `Xbox ${label(button.dataset.sourceKey)} → Switch ${label(this.bindings[button.dataset.sourceKey]) || "未绑定"}`;
@@ -141,12 +211,29 @@ export class XboxPanel {
       button.dataset.mapped = String(Boolean(this.selectedSource &&
         button.dataset.targetKey === this.bindings[this.selectedSource]));
     }
-    this.bindingList.replaceChildren(...XBOX_KEYS.map((source) => {
+    for (const button of this.panel.querySelectorAll("[data-source-stick]")) {
+      const side = button.dataset.sourceStick;
+      button.dataset.selected = String(side === this.selectedStick);
+      button.title = `Xbox ${stickName(side)} → Switch ${stickName(this.stickBindings[side])}`;
+    }
+    for (const button of this.panel.querySelectorAll("[data-target-stick]")) {
+      button.dataset.mapped = String(Boolean(this.selectedStick &&
+        button.dataset.targetStick === this.stickBindings[this.selectedStick]));
+    }
+    const chips = ["left", "right"].map((source) => {
+      const chip = document.createElement("span");
+      chip.textContent = `${stickName(source)}方向 → ${stickName(this.stickBindings[source])}`;
+      chip.dataset.selected = String(source === this.selectedStick);
+      return chip;
+    });
+    chips.push(...XBOX_KEYS.map((source) => {
       const chip = document.createElement("span");
       chip.textContent = `${label(source)} → ${label(this.bindings[source]) || "未绑定"}`;
       chip.dataset.selected = String(source === this.selectedSource);
       return chip;
     }));
+    this.bindingList.replaceChildren(...chips);
+    this.paintPressed(this.selectedPad());
   }
 
   paintPressed(pad) {
@@ -157,6 +244,16 @@ export class XboxPanel {
     }
     for (const button of this.panel.querySelectorAll("[data-target-key]")) {
       button.dataset.active = String(targets.has(button.dataset.targetKey));
+    }
+    const sourceReport = pad
+      ? xboxToReport(pad, DEFAULT_BINDINGS, DEFAULT_STICK_BINDINGS) : NEUTRAL_REPORT;
+    const targetReport = pad
+      ? xboxToReport(pad, this.bindings, this.stickBindings) : NEUTRAL_REPORT;
+    for (const button of this.panel.querySelectorAll("[data-source-stick]")) {
+      paintStick(button, sourceReport, button.dataset.sourceStick);
+    }
+    for (const button of this.panel.querySelectorAll("[data-target-stick]")) {
+      paintStick(button, targetReport, button.dataset.targetStick);
     }
   }
 
@@ -190,23 +287,31 @@ export class XboxPanel {
     this.refreshDevices(devices);
     const pad = this.selectedPad(devices);
     if (pad) {
-      const report = xboxToReport(pad, this.bindings);
+      const report = xboxToReport(pad, this.bindings, this.stickBindings);
       this.paintPressed(pad);
-      if (this.active && !reportsEqual(report, this.lastReport)) {
+      if (this.active) {
         const now = performance.now();
         if (this.recorder.active && !this.recorder.record(report, now)) {
           this.stop("已达到 128 步上限；录制结束，请检查草稿。");
-        } else {
-          this.lastReport = report;
-          this.lastHeartbeatAt = now;
+        } else if (this.active) {
+          const digitalEdge = digitalChanged(report, this.lastReport);
+          const analogChanged = axisDifference(report, this.lastReport) >= 8;
+          const released = !stickMoving(report, "left") && !stickMoving(report, "right") &&
+            (stickMoving(this.lastReport, "left") || stickMoving(this.lastReport, "right"));
+          if (digitalEdge || released ||
+              (analogChanged && now - this.lastAnalogSendAt >= 33)) {
+            this.lastReport = report;
+            this.lastHeartbeatAt = now;
+            this.lastAnalogSendAt = now;
+            this.queueReport(report);
+          } else if (now - this.lastHeartbeatAt >= 200) {
+            this.lastHeartbeatAt = now;
+            this.queueReport(this.lastReport);
+          }
           this.output.textContent = describeReport(report);
-          this.queueReport(report);
           this.renderRecordingInfo();
         }
-      } else if (this.active && performance.now() - this.lastHeartbeatAt >= 200) {
-        this.lastHeartbeatAt = performance.now();
-        this.queueReport(this.lastReport);
-      } else if (!this.active) {
+      } else {
         this.output.textContent = describeReport(report);
       }
     } else if (!this.active) {
@@ -233,8 +338,9 @@ export class XboxPanel {
     const pad = this.selectedPad();
     if (!pad) return;
     this.active = true;
-    this.lastReport = xboxToReport(pad, this.bindings);
+    this.lastReport = xboxToReport(pad, this.bindings, this.stickBindings);
     this.lastHeartbeatAt = performance.now();
+    this.lastAnalogSendAt = this.lastHeartbeatAt;
     this.onState(true);
     this.queueReport(this.lastReport);
     this.status.textContent = "直通中 · Xbox 输入正送往 Switch";
@@ -244,7 +350,7 @@ export class XboxPanel {
 
   startRecording() {
     if (!this.active || this.recorder.active) return;
-    this.recorder.start(this.lastReport, performance.now());
+    this.recorder.start(this.lastReport, performance.now(), this.recordInterval.value);
     this.status.textContent = "正在录制 · 操作会进入槽位 01 草稿";
     this.render();
   }
@@ -255,7 +361,12 @@ export class XboxPanel {
     this.stopping = true;
     this.active = false;
     const wasRecording = this.recorder.active;
-    const draft = this.recorder.finish(performance.now());
+    const now = performance.now();
+    if (wasRecording) {
+      const pad = this.selectedPad();
+      if (pad) this.recorder.record(xboxToReport(pad, this.bindings, this.stickBindings), now, true);
+    }
+    const draft = this.recorder.finish(now);
     this.lastReport = NEUTRAL_REPORT;
     this.output.textContent = "中立";
     this.status.textContent = reason;

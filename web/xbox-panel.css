@@ -32,6 +32,11 @@
 .xbox-pad [data-source-key="X"] { color:#69c8ff; }
 .xbox-pad [data-source-key="Y"] { color:#fff178; }
 .pad-key.stick-key { width:61px; height:61px; border-color:#738f82; background:radial-gradient(circle at 40% 35%,#546c62,#1b302a 66%); font-size:.69rem; }
+.stick-key::before { content:""; position:absolute; inset:8px; border:1px dashed rgba(201,232,219,.35); border-radius:50%; pointer-events:none; }
+.stick-key .stick-dot { position:absolute; top:42%; left:50%; width:20px; height:20px; border:2px solid #b9e6d7; border-radius:50%; background:radial-gradient(circle at 34% 28%,#b9d4c5,#38584c 62%,#203a32); box-shadow:0 3px 8px rgba(0,0,0,.4); transform:translate(calc(-50% + var(--stick-x,0px)),calc(-50% + var(--stick-y,0px))); transition:transform 35ms linear; pointer-events:none; }
+.stick-key .stick-caption { position:absolute; bottom:4px; left:0; right:0; color:#d1e7dd; font-size:.57rem; font-weight:800; text-shadow:0 1px 3px #00160f; pointer-events:none; }
+.stick-key[data-active="true"] .stick-dot { border-color:#e5ff7e; background:radial-gradient(circle at 34% 28%,#efffb2,#5eaa6b 65%,#206d50); }
+.pad-key.press-key { width:26px; height:26px; border-color:#99b4a8; font-size:.58rem; }
 .pad-key.dpad-key { width:29px; height:29px; border-radius:8px; font-size:.93rem; }
 .pad-key.small-key { width:28px; height:28px; font-size:.78rem; }
 .pad-key.key-lt { left:18%; top:6%; border-radius:10px; }
@@ -40,6 +45,8 @@
 .pad-key.key-rb { left:82%; top:19%; border-radius:10px; }
 .pad-key.key-ls { left:29%; top:42%; }
 .pad-key.key-rs { left:68%; top:71%; }
+.pad-key.key-ls-press { left:41%; top:56%; }
+.pad-key.key-rs-press { left:82%; top:83%; }
 .pad-key.key-up { left:29%; top:69%; }
 .pad-key.key-right { left:35%; top:77%; }
 .pad-key.key-down { left:29%; top:85%; }
@@ -64,6 +71,8 @@
 .xbox-live-actions { display:flex; flex-wrap:wrap; gap:10px; }
 .xbox-live-actions .button { min-width:130px; }
 .xbox-live-actions .button:disabled { opacity:.42; cursor:not-allowed; }
+.xbox-record-setting { display:flex; align-items:center; flex-wrap:wrap; gap:10px; color:var(--paper-muted); font-size:.76rem; font-weight:800; }
+.xbox-record-setting select { padding:8px 10px; border:1px solid #397267; border-radius:9px; background:#071d19; color:var(--paper); font:inherit; }
 .xbox-record-info { margin:0; color:#fff59b; font-size:.8rem; font-weight:900; }
 .xbox-save-note { margin:0; color:var(--paper-muted); font-size:.76rem; line-height:1.6; }
 @media(max-width:850px) {
@@ -81,6 +90,10 @@
   .pad-key { width:30px; height:30px; font-size:.68rem; }
   .pad-key.face-key { width:32px; height:32px; }
   .pad-key.stick-key { width:48px; height:48px; }
+  .stick-key::before { inset:5px; }
+  .stick-key .stick-dot { width:16px; height:16px; }
+  .stick-key .stick-caption { bottom:2px; font-size:.47rem; }
+  .pad-key.press-key { width:23px; height:23px; font-size:.53rem; }
   .pad-key.dpad-key { width:24px; height:24px; }
   .pad-key.small-key { width:24px; height:24px; }
   .xbox-live-status { display:grid; }

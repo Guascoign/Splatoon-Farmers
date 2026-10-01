@@ -138,14 +138,17 @@ stops for 800 ms, firmware releases the Switch controls. Browser input requires
 the computer and page to stay connected. It does not pair the controller
 directly to the ESP32-S3.
 
-The left Xbox and right Switch diagrams preview the bindings. Click a key on
-the left, then its destination on the right to change it. The default follows
-physical positions: Xbox A → Switch B, B → A, X → Y, Y → X. Other digital
-buttons can be rebound or unbound; left and right analog sticks remain on their
-corresponding sticks. Browser-local storage keeps the binding map on this PC.
+The left Xbox and right Switch diagrams preview the bindings and live analog
+stick positions. Click a key or stick circle on the left, then its destination
+on the right to change it. The default follows physical positions: Xbox A →
+Switch B, B → A, X → Y, Y → X. Analog sticks can also be swapped or unbound;
+L3/R3 stick presses are separate buttons. Browser-local storage keeps the
+binding map on this PC.
 The Xbox/Home and Share/Capture buttons depend on what the browser exposes.
 
-While pass-through is active, select **开始录制** and play. **结束录制并预览**
+While pass-through is active, select **开始录制** and play. A held stick position
+is merged into one step, while stick motion is sampled at the chosen interval
+(80, 220, or 350 ms). **结束录制并预览**
 releases the Switch output and opens the recorded steps as an unsaved draft in
 slot 01. You can adjust each step, loop gap, and LED color there, then select
 **保存到 Flash** to replace the slot override. Recording is limited to 128 steps;
