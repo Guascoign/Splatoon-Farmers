@@ -455,6 +455,56 @@ size_t MacroSlotStorage::slotImageUsedBytes(uint8_t slot) const {
   return bytes;
 }
 
+bool MacroSlotStorage::summarize(SlotStorageSummary* slots, size_t count) const {
+  if (!ready_ || slots == nullptr || count < kMacroSlotCount) return false;
+  for (size_t index = 0; index < kMacroSlotCount; ++index)
+    slots[index] = SlotStorageSummary{};
+  uint8_t imagePriority[kMacroSlotCount] = {};
+  File root = SPIFFS.open("/");
+  if (!root) return false;
+  File file = root.openNextFile();
+  while (file) {
+    unsigned slotNumber = 0;
+    char extension[8] = {};
+    const char* name = file.name();
+    if (name[0] == '/') ++name;
+    if (sscanf(name, "material-farm-slot-%u.%7s", &slotNumber,
+               extension) == 2 &&
+        slotNumber >= 1 && slotNumber <= kMacroSlotCount) {
+      SlotStorageSummary& summary = slots[slotNumber - 1];
+      const size_t bytes = file.size();
+      const bool macro = strcmp(extension, "bin") == 0 ||
+                         strcmp(extension, "bak") == 0 ||
+                         strcmp(extension, "tmp") == 0;
+      const bool image = strcmp(extension, "img") == 0 ||
+                         strcmp(extension, "ibk") == 0 ||
+                         strcmp(extension, "itmp") == 0;
+      if (macro || image) summary.usedBytes += bytes;
+      if (image) summary.imageBytes += bytes;
+      if (strcmp(extension, "bin") == 0 ||
+          strcmp(extension, "bak") == 0) summary.hasMacro = true;
+      const uint8_t priority = strcmp(extension, "img") == 0 ? 2 :
+                               strcmp(extension, "ibk") == 0 ? 1 : 0;
+      if (priority >= imagePriority[slotNumber - 1] && priority != 0) {
+        ImageHeader header{};
+        if (file.readBytes(reinterpret_cast<char*>(&header),
+                           sizeof(header)) == sizeof(header) &&
+            header.magic == kImageMagic && header.version == 1 &&
+            header.bytes > 0 && header.bytes <= kMaxSlotImageBytes &&
+            bytes == sizeof(header) + header.bytes) {
+          summary.imageSize = header.bytes;
+          imagePriority[slotNumber - 1] = priority;
+        }
+      }
+    }
+    file.close();
+    yield();
+    file = root.openNextFile();
+  }
+  root.close();
+  return true;
+}
+
 size_t MacroSlotStorage::slotUsedBytes(uint8_t slot) const {
   if (!ready_ || slot >= kMacroSlotCount) return 0;
   size_t bytes = slotImageUsedBytes(slot);

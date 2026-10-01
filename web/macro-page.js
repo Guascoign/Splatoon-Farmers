@@ -31,6 +31,7 @@ export class MacroPage {
     this.macro = null;
     this.summary = null;
     this.summaries = [];
+    this.slotsLoaded = false;
     this.selectedSlot = 0;
     this.storageUsed = 0;
     this.storageTotal = 0;
@@ -70,8 +71,8 @@ export class MacroPage {
     this.pendingListImageSlot = null;
 
     for (let slot = 0; slot < MACRO_SLOT_COUNT; ++slot) {
-      this.targetSelect.add(new Option(`槽位 ${slotLabel(slot)}`, String(slot)));
-      this.importSelect.add(new Option(`槽位 ${slotLabel(slot)}`, String(slot)));
+      this.targetSelect.add(new Option(`空槽位（槽位 ${slotLabel(slot)}）`, String(slot)));
+      this.importSelect.add(new Option(`空槽位（槽位 ${slotLabel(slot)}）`, String(slot)));
     }
     this.nameInput.addEventListener("input", () => {
       if (!this.macro || this.busy) return;
@@ -79,6 +80,7 @@ export class MacroPage {
       this.message(this.editMessage, "名称已修改，保存后会写入对应槽位。");
     });
     this.targetSelect.addEventListener("change", () => {
+      this.renderControls();
       this.message(this.editMessage, `将保存到槽位 ${slotLabel(Number(this.targetSelect.value))}。`);
     });
 
@@ -143,6 +145,7 @@ export class MacroPage {
     if (this.isConnected()) {
       this.loadForRoute();
     } else {
+      this.slotsLoaded = false;
       this.message(this.listMessage, "连接设备后读取宏槽位。");
       this.message(this.editMessage, this.draftKind
         ? "草稿仍在此页；重新连接设备后可以保存。"
@@ -168,7 +171,7 @@ export class MacroPage {
   importRecording(steps) {
     this.draftKind = "recording";
     this.selectedSlot = this.summaries.findIndex((item) => item?.source === "empty");
-    if (this.selectedSlot < 0) this.selectedSlot = 0;
+    if (this.selectedSlot < 0) this.selectedSlot = this.slotsLoaded ? 0 : 1;
     this.pendingImageBytes = null;
     this.imageDeleted = false;
     this.imageSourceSlot = null;
@@ -212,7 +215,10 @@ export class MacroPage {
     this.renderControls();
     try {
       const response = await this.request("MACRO_LIST", "macro_list");
+      if (!Array.isArray(response.slots) || response.slots.length !== MACRO_SLOT_COUNT)
+        throw new Error("设备返回的槽位列表不完整。");
       this.summaries = response.slots ?? [];
+      this.slotsLoaded = this.summaries.length === MACRO_SLOT_COUNT;
       this.summary = this.summaries[this.selectedSlot] ?? null;
       this.storage = response.storage;
       this.storageUsed = Number(response.used_bytes) || 0;
@@ -220,8 +226,11 @@ export class MacroPage {
       this.renderList();
       this.onSlots(this.summaries);
       this.message(this.listMessage, "板载槽位已同步。点击进入可预览和微调。", "success");
+      return true;
     } catch (error) {
+      this.slotsLoaded = false;
       this.message(this.listMessage, error.message || "无法读取宏槽位。", "error");
+      return false;
     } finally {
       this.finishBusy();
     }
@@ -289,7 +298,7 @@ export class MacroPage {
       const selected = select.value;
       for (const option of select.options) {
         const slot = Number(option.value);
-        option.textContent = `槽位 ${slotLabel(slot)} · ${this.summaries[slot]?.name || "空"}`;
+        option.textContent = `${this.summaries[slot]?.name || "空槽位"}（槽位 ${slotLabel(slot)}）`;
       }
       select.value = selected;
     }
@@ -404,7 +413,10 @@ export class MacroPage {
     this.formatButton.disabled = disabled;
     this.discardButton.hidden = !this.draftKind;
     this.discardButton.disabled = this.busy;
-    this.saveButton.textContent = this.busy ? "处理中…" : "保存到槽位";
+    const targetSlot = Number(this.targetSelect.value);
+    const targetName = this.summaries[targetSlot]?.name || "空槽位";
+    this.saveButton.textContent = this.busy ? "处理中…" :
+      `保存到 ${targetName}（槽位 ${slotLabel(targetSlot)}）`;
     this.importButton.disabled = this.busy;
     this.exportButton.disabled = this.busy || !this.macro || this.isRunning();
     document.querySelector('[data-testid="macro-edit-image-upload"]').disabled = this.busy || !this.macro || this.isRunning();
@@ -439,12 +451,21 @@ export class MacroPage {
       this.message(this.editMessage, "请选择有效槽位。", "error");
       return;
     }
+    if (!this.slotsLoaded || !this.summaries[targetSlot]) {
+      try { await this.refreshListSnapshot(); }
+      catch (error) {
+        this.message(this.editMessage,
+          `无法确认目标槽位是否为空：${error.message || "请重新连接设备"}`, "error");
+        return;
+      }
+    }
     if ((targetSlot !== this.selectedSlot || this.draftKind) &&
-        this.summaries[targetSlot]?.source !== "empty" &&
+        this.summaries[targetSlot].source !== "empty" &&
         !window.confirm(`槽位 ${slotLabel(targetSlot)} 已有宏。确定覆盖吗？`)) return;
     this.busy = true;
     this.renderControls();
     let committed = false;
+    let postCommitPhase = "image";
     try {
       await this.request(`MACRO_BEGIN ${targetSlot} ${snapshot.steps.length} ${snapshot.loopGapMs} ${snapshot.color}`, "ack");
       await this.request(`MACRO_NAME ${hexName(snapshot.name)}`, "ack");
@@ -474,8 +495,10 @@ export class MacroPage {
       this.imageSourceSlot = targetSlot;
       this.pendingImageBytes = null;
       this.imageDeleted = false;
+      postCommitPhase = "summary";
       const list = await this.request("MACRO_LIST", "macro_list");
       this.summaries = list.slots ?? [];
+      this.slotsLoaded = this.summaries.length === MACRO_SLOT_COUNT;
       this.summary = this.summaries[this.selectedSlot] ?? null;
       this.storage = list.storage;
       this.storageUsed = Number(list.used_bytes) || 0;
@@ -488,7 +511,9 @@ export class MacroPage {
       window.location.hash = `#/macros/${targetSlot + 1}`;
     } catch (error) {
       this.message(this.editMessage,
-        committed ? `宏已写入槽位，但图片或摘要更新失败：${error.message}` :
+        committed ? postCommitPhase === "summary"
+          ? `宏已写入槽位，但列表刷新失败：${error.message}。重新连接后可读取，请勿重复保存。`
+          : `宏已写入槽位，但配装图片处理失败：${error.message}` :
           (error.message || "保存失败，原有宏仍保留。"),
         committed ? "success" : "error");
       if (!committed && this.isConnected()) {
@@ -514,6 +539,7 @@ export class MacroPage {
       this.draftKind = null;
       const list = await this.request("MACRO_LIST", "macro_list");
       this.summaries = list.slots ?? [];
+      this.slotsLoaded = this.summaries.length === MACRO_SLOT_COUNT;
       this.summary = this.summaries[slot] ?? null;
       this.storage = list.storage;
       this.storageUsed = Number(list.used_bytes) || 0;
@@ -532,7 +558,10 @@ export class MacroPage {
 
   async refreshListSnapshot() {
     const list = await this.request("MACRO_LIST", "macro_list");
+    if (!Array.isArray(list.slots) || list.slots.length !== MACRO_SLOT_COUNT)
+      throw new Error("设备返回的槽位列表不完整。");
     this.summaries = list.slots ?? [];
+    this.slotsLoaded = this.summaries.length === MACRO_SLOT_COUNT;
     this.summary = this.summaries[this.selectedSlot] ?? null;
     this.storage = list.storage;
     this.storageUsed = Number(list.used_bytes) || 0;
@@ -744,6 +773,7 @@ export class MacroPage {
       await this.request("MACRO_STORAGE_FORMAT", "ack");
       const list = await this.request("MACRO_LIST", "macro_list");
       this.summaries = list.slots ?? [];
+      this.slotsLoaded = this.summaries.length === MACRO_SLOT_COUNT;
       this.summary = this.summaries[this.selectedSlot] ?? null;
       this.storage = list.storage;
       this.storageUsed = Number(list.used_bytes) || 0;

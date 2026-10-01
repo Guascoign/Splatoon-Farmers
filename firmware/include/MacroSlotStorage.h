@@ -24,6 +24,13 @@ struct SlotMacro {
   char name[kMaxSlotNameBytes + 1] = {};
 };
 
+struct SlotStorageSummary {
+  bool hasMacro = false;
+  size_t usedBytes = 0;
+  size_t imageBytes = 0;
+  uint32_t imageSize = 0;
+};
+
 bool isSlotMacroValid(const SlotMacro& macro);
 uint32_t slotMacroDurationMs(const SlotMacro& macro);
 uint32_t slotMacroChecksum(const SlotMacro& macro);
@@ -47,6 +54,7 @@ class MacroSlotStorage {
   bool removeImage(uint8_t slot);
   size_t slotUsedBytes(uint8_t slot) const;
   size_t slotImageUsedBytes(uint8_t slot) const;
+  bool summarize(SlotStorageSummary* slots, size_t count) const;
   size_t usedBytes() const;
   size_t totalBytes() const;
   bool load(SlotMacro* macro) const { return load(0, macro); }

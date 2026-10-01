@@ -341,8 +341,8 @@ async function connect() {
     await transport.connect();
     connected = true;
     await transport.send("HELLO");
-    await macroPage.loadList();
-    macroPage.setConnection();
+    const slotsLoaded = await macroPage.loadList();
+    if (slotsLoaded && currentRoute === "macro-edit") macroPage.loadForRoute();
     xboxPanel.render();
     pollTimer = window.setInterval(() => {
       if (!pendingReply && !macroPage.busy) {

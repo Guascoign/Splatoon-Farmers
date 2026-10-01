@@ -211,6 +211,9 @@ String stateResponse(const char* type) {
 }
 
 String macroListResponse() {
+  farmers::SlotStorageSummary summaries[farmers::kMacroSlotCount] = {};
+  const bool scanned = SlotStorage.summarize(summaries,
+                                             farmers::kMacroSlotCount);
   String response;
   response.reserve(3200);
   response += "{\"type\":\"macro_list\",\"ok\":true,\"storage\":\"";
@@ -221,7 +224,8 @@ String macroListResponse() {
   response += static_cast<unsigned long>(SlotStorage.totalBytes());
   response += ",\"slots\":[";
   for (uint8_t slot = 0; slot < farmers::kMacroSlotCount; ++slot) {
-    const bool flash = SlotStorage.load(slot, &ReadSlot);
+    const bool flash = (!scanned || summaries[slot].hasMacro) &&
+                       SlotStorage.load(slot, &ReadSlot);
     if (slot > 0) response += ',';
     response += "{\"slot\":";
     response += slot;
@@ -241,11 +245,13 @@ String macroListResponse() {
     response += ",\"color\":";
     response += flash ? ReadSlot.color : 0;
     response += ",\"used_bytes\":";
-    response += static_cast<unsigned long>(SlotStorage.slotUsedBytes(slot));
+    response += static_cast<unsigned long>(scanned ? summaries[slot].usedBytes :
+                                            SlotStorage.slotUsedBytes(slot));
     response += ",\"image_bytes\":";
-    response += static_cast<unsigned long>(SlotStorage.slotImageUsedBytes(slot));
-    uint32_t imageSize = 0;
-    SlotStorage.imageInfo(slot, &imageSize);
+    response += static_cast<unsigned long>(scanned ? summaries[slot].imageBytes :
+                                            SlotStorage.slotImageUsedBytes(slot));
+    uint32_t imageSize = scanned ? summaries[slot].imageSize : 0;
+    if (!scanned) SlotStorage.imageInfo(slot, &imageSize);
     response += ",\"image_size\":";
     response += static_cast<unsigned long>(imageSize);
     response += '}';
