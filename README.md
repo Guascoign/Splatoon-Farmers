@@ -31,6 +31,8 @@ Required gears described in this video: [Bilibili](https://www.bilibili.com/vide
   and controller output states.
 - Provides every digital controller button and D-pad direction for mouse,
   touch, and keyboard input.
+- On the desktop Web Serial page, maps a Windows-paired Xbox Wireless Controller
+  to the Switch report and records live play into a slot 01 draft.
 - Leaves both analog sticks centered during manual input.
 
 The browser sends only high-level `START`, `STOP`, and status commands during
@@ -123,6 +125,32 @@ the built-in routine still runs; **初始化宏存储** is offered only in that 
 and explicitly warns that formatting erases the entire SPIFFS partition,
 including data from other firmware previously used on the board.
 
+### Xbox Wireless Controller on the desktop page
+
+Pair the Xbox controller with Windows, open the local page in desktop Chrome or
+Edge, connect the board's USB-UART port, and press a controller button so the
+browser exposes it through the Gamepad API. This requires firmware 1.3.0 or
+newer. **开始直通** sends its current buttons,
+D-pad, triggers, and sticks to the Switch output; leaving the page, losing focus,
+disconnecting the controller, or selecting **停止直通** sends a neutral report when
+the serial link remains available. Gamepad reports include a heartbeat; if it
+stops for 800 ms, firmware releases the Switch controls. Browser input requires
+the computer and page to stay connected. It does not pair the controller
+directly to the ESP32-S3.
+
+The left Xbox and right Switch diagrams preview the bindings. Click a key on
+the left, then its destination on the right to change it. The default follows
+physical positions: Xbox A → Switch B, B → A, X → Y, Y → X. Other digital
+buttons can be rebound or unbound; left and right analog sticks remain on their
+corresponding sticks. Browser-local storage keeps the binding map on this PC.
+The Xbox/Home and Share/Capture buttons depend on what the browser exposes.
+
+While pass-through is active, select **开始录制** and play. **结束录制并预览**
+releases the Switch output and opens the recorded steps as an unsaved draft in
+slot 01. You can adjust each step, loop gap, and LED color there, then select
+**保存到 Flash** to replace the slot override. Recording is limited to 128 steps;
+the existing Flash macro is untouched until you save.
+
 The status LED is red briefly after power-on. It blinks yellow while no phone
 is associated and no active serial command stream is present, then stays yellow
 while a phone is connected to the hotspot or the desktop page is polling over
@@ -162,6 +190,7 @@ receives a single response. Both control paths act on the same macro state.
 | `STATUS` | Return phase, step, cycle count, and timing |
 | `PING` | Return `PONG` |
 | `R buttons dpad lx ly rx ry` | Stop the routine and send one complete HID report |
+| `G buttons dpad lx ly rx ry` | Stream a Gamepad API report; release to neutral after 800 ms without another `G` |
 | `MACRO_LIST` / `MACRO_GET` | Read the single slot summary or complete action list |
 | `MACRO_BEGIN count gap color` | Start a staged upload for slot 01 |
 | `MACRO_STEP index duration buttons dpad lx ly rx ry` | Set one staged action |

@@ -29,7 +29,8 @@
 namespace {
 
 constexpr uint32_t kControlBaudRate = 115200;
-constexpr char kFirmwareVersion[] = "SplatoonFarmers/1.2.0";
+constexpr char kFirmwareVersion[] = "SplatoonFarmers/1.3.0";
+constexpr uint32_t kGamepadStreamTimeoutMs = 800;
 constexpr char kWifiApSsid[] = "ESP32-S3-Switch";
 const IPAddress kWifiApAddress(192, 168, 9, 1);
 const IPAddress kWifiApSubnet(255, 255, 255, 0);
@@ -38,6 +39,9 @@ WebServer WebConsole(80);
 bool WifiConsoleActive = false;
 bool SerialSeen = false;
 uint32_t LastSerialCommandAtMs = 0;
+bool GamepadStreamActive = false;
+uint32_t LastGamepadStreamAtMs = 0;
+farmers::ControllerReport LastGamepadStreamReport = farmers::kNeutralReport;
 
 NSGamepad Gamepad;
 farmers::StatusLed Led;
@@ -80,10 +84,10 @@ void applyReport(const farmers::ControllerReport& report) {
   }
 }
 
-void applyRawReport(unsigned long buttons, unsigned long dpad,
-                    unsigned long leftX, unsigned long leftY,
-                    unsigned long rightX, unsigned long rightY) {
-  const farmers::ControllerReport report{
+farmers::ControllerReport rawReport(unsigned long buttons, unsigned long dpad,
+                                   unsigned long leftX, unsigned long leftY,
+                                   unsigned long rightX, unsigned long rightY) {
+  return {
       static_cast<uint16_t>(buttons & 0x3fff),
       normalizeDpad(dpad),
       clampAxis(leftX),
@@ -91,7 +95,12 @@ void applyRawReport(unsigned long buttons, unsigned long dpad,
       clampAxis(rightX),
       clampAxis(rightY),
   };
-  applyReport(report);
+}
+
+void applyRawReport(unsigned long buttons, unsigned long dpad,
+                    unsigned long leftX, unsigned long leftY,
+                    unsigned long rightX, unsigned long rightY) {
+  applyReport(rawReport(buttons, dpad, leftX, leftY, rightX, rightY));
 }
 
 const char* phaseName(farmers::MacroPhase phase) {
@@ -122,6 +131,7 @@ uint32_t activeLoopGapMs() {
 uint8_t activeColor() { return SlotOverridden ? SavedSlot.color : 0; }
 
 void useBuiltinMacro() {
+  GamepadStreamActive = false;
   SlotOverridden = false;
   Macro.configure(farmers::kMaterialFarmMacro,
                   farmers::kMaterialFarmStepCount,
@@ -300,6 +310,7 @@ String handleLine(char* line) {
     }
     UploadActive = false;
     if (!SlotStorage.save(UploadSlot)) return "ERR macro-save-failed";
+    GamepadStreamActive = false;
     SavedSlot = UploadSlot;
     SlotOverridden = true;
     Macro.configure(SavedSlot.steps, SavedSlot.stepCount,
@@ -309,11 +320,13 @@ String handleLine(char* line) {
   }
   if (strcmp(line, "START") == 0) {
     UploadActive = false;
+    GamepadStreamActive = false;
     Macro.start(millis());
     flushMacroReport();
     return stateResponse("status");
   }
   if (strcmp(line, "STOP") == 0) {
+    GamepadStreamActive = false;
     Macro.stop();
     flushMacroReport();
     return stateResponse("status");
@@ -330,10 +343,27 @@ String handleLine(char* line) {
       sscanf(line, "%7s %lu %lu %lu %lu %lu %lu", command, &buttons, &dpad,
              &leftX, &leftY, &rightX, &rightY);
 
+  if (parsed == 7 && strcmp(command, "G") == 0) {
+    const bool enteringStream = !GamepadStreamActive || Macro.running();
+    if (enteringStream) {
+      Macro.stop();
+      Macro.consumeReportChanged();
+    }
+    GamepadStreamActive = true;
+    LastGamepadStreamAtMs = millis();
+    const farmers::ControllerReport report =
+        rawReport(buttons, dpad, leftX, leftY, rightX, rightY);
+    if (enteringStream || report != LastGamepadStreamReport) {
+      applyReport(report);
+      LastGamepadStreamReport = report;
+    }
+    return "OK";
+  }
   if (parsed == 7 &&
       (strcmp(command, "R") == 0 || strcmp(command, "REPORT") == 0)) {
     // Raw reports power manual input and leave a fallback path for future
     // computer-loaded routines. Entering this mode stops the embedded routine.
+    GamepadStreamActive = false;
     Macro.stop();
     Macro.consumeReportChanged();
     applyRawReport(buttons, dpad, leftX, leftY, rightX, rightY);
@@ -449,6 +479,12 @@ void loop() {
     WebConsole.handleClient();
   }
   const uint32_t nowMs = millis();
+  if (GamepadStreamActive &&
+      static_cast<uint32_t>(nowMs - LastGamepadStreamAtMs) >
+          kGamepadStreamTimeoutMs) {
+    GamepadStreamActive = false;
+    applyReport(farmers::kNeutralReport);
+  }
   const bool connected =
       (WifiConsoleActive && WiFi.softAPgetStationNum() > 0) ||
       (SerialSeen && static_cast<uint32_t>(nowMs - LastSerialCommandAtMs) < 3500);

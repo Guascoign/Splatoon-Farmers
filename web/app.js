@@ -6,6 +6,7 @@ import {
 } from "./manual-input.js";
 import { HttpTransport, MockSerialTransport, SerialTransport } from "./serial-transport.js";
 import { MacroPage } from "./macro-page.js";
+import { XboxPanel } from "./xbox-panel.js";
 
 const elements = {
   connectionButton: document.querySelector('[data-testid="connect-button"]'),
@@ -44,12 +45,39 @@ let pollTimer = null;
 let activeManualControls = new Set();
 let pendingReply = null;
 let currentRoute = "home";
+let gamepadProtocolReady = mockMode;
+let xboxPanel = null;
 const manualInputState = new ManualInputState(onManualInputChange);
 const macroPage = new MacroPage({
   request: requestDevice,
   isConnected: () => connected,
-  isRunning: () => deviceState === "running",
+  isRunning: () => deviceState === "running" ||
+    Boolean(xboxPanel?.active || xboxPanel?.stopping),
   refreshStatus: () => transport?.send("STATUS"),
+});
+xboxPanel = new XboxPanel({
+  enabled: !wifiMode && typeof navigator.getGamepads === "function",
+  isConnected: () => connected,
+  isFirmwareReady: () => gamepadProtocolReady,
+  isBusy: () => busy || macroPage.busy,
+  isRunning: () => deviceState === "running",
+  send: (command) => connected && transport
+    ? transport.send(command) : Promise.reject(new Error("设备连接已断开")),
+  flush: () => requestDevice("PING", "pong"),
+  onState: (active) => {
+    if (active) {
+      manualInputState.clear();
+      deviceState = "idle";
+      devicePhase = "idle";
+      currentStep = 0;
+    }
+    render();
+  },
+  onDraft: (steps) => {
+    macroPage.importRecording(steps);
+    window.location.hash = "#/macros/1";
+  },
+  onError: (message) => setError(message),
 });
 
 elements.durationText.textContent = formatDuration(63595);
@@ -61,23 +89,24 @@ function setError(message = "") {
 
 function render() {
   const manualActive = connected && activeManualControls.size > 0;
-  const running = connected && deviceState === "running" && !manualActive;
+  const gamepadActive = connected && Boolean(xboxPanel?.active || xboxPanel?.stopping);
+  const running = connected && deviceState === "running" && !manualActive && !gamepadActive;
   elements.connectionButton.textContent = connected ? "断开设备" : "连接手柄";
   elements.connectionButton.disabled = busy || !transportSupported;
   elements.headerConnectionButton.textContent = connected ? "设备已连接" : "连接设备";
   elements.headerConnectionButton.dataset.connected = String(connected);
   elements.headerConnectionButton.disabled = busy || !transportSupported;
-  elements.startButton.disabled = busy || !connected || running || manualActive;
+  elements.startButton.disabled = busy || !connected || running || manualActive || gamepadActive;
   elements.stopButton.disabled = busy || !connected || !running;
   for (const button of manualButtons) {
     const pressed = activeManualControls.has(button.dataset.control);
-    button.disabled = busy || !connected;
+    button.disabled = busy || !connected || gamepadActive;
     button.classList.toggle("is-pressed", pressed);
     button.setAttribute("aria-pressed", String(pressed));
   }
 
   elements.statusBadge.dataset.state = connected
-    ? manualActive
+    ? gamepadActive || manualActive
       ? "manual"
       : running
       ? "running"
@@ -90,6 +119,9 @@ function render() {
       deviceState === "running"
         ? "控制线已断开；板载远征任务可能仍在独立运行"
         : wifiMode ? "正在连接板载控制台" : "连接 ESP32-S3 热点，或用 USB-UART 连接电脑";
+  } else if (gamepadActive) {
+    elements.statusText.textContent = xboxPanel.recording ? "手柄录制中" : "Xbox 手柄直通";
+    elements.detailText.textContent = "电脑正在把 Xbox 操作映射为 Switch 手柄输入";
   } else if (manualActive) {
     elements.statusText.textContent = "手动输入";
     elements.detailText.textContent = `已按下 ${activeManualControls.size} 个控制 · 板载脚本已停止`;
@@ -110,6 +142,9 @@ function render() {
   if (!connected) {
     elements.manualStatus.textContent = "连接后启用";
     elements.manualStatus.dataset.state = "disconnected";
+  } else if (gamepadActive) {
+    elements.manualStatus.textContent = "Xbox 手柄正在接管";
+    elements.manualStatus.dataset.state = "active";
   } else if (manualActive) {
     elements.manualStatus.textContent = `${activeManualControls.size} 个输入按下`;
     elements.manualStatus.dataset.state = "active";
@@ -126,6 +161,7 @@ function render() {
   elements.heroSteps.textContent = `${stepCount} STEPS`;
   elements.factSteps.textContent = stepCount;
   macroPage.renderControls();
+  xboxPanel?.render();
 }
 
 function applyDeviceMessage(message) {
@@ -137,6 +173,13 @@ function applyDeviceMessage(message) {
   }
   if (message.type !== "info" && message.type !== "status") {
     return;
+  }
+
+  if (typeof message.firmware === "string") {
+    const version = /^SplatoonFarmers\/(\d+)\.(\d+)\./.exec(message.firmware);
+    gamepadProtocolReady = mockMode || Boolean(version &&
+      (Number(version[1]) > 1 ||
+       (Number(version[1]) === 1 && Number(version[2]) >= 3)));
   }
 
   deviceState = message.state === "running" ? "running" : "idle";
@@ -207,7 +250,7 @@ function onManualInputChange(activeControls) {
   }
   render();
 
-  if (!connected || !transport) {
+  if (!connected || !transport || xboxPanel?.active || xboxPanel?.stopping) {
     return;
   }
   transport.send(buildManualReport(activeControls).command).catch((error) => {
@@ -219,6 +262,7 @@ function onManualInputChange(activeControls) {
 function onUnexpectedDisconnect(error) {
   connected = false;
   busy = false;
+  xboxPanel?.stop("串口已断开，录制草稿仍可预览。");
   rejectPendingReply("设备连接已断开。");
   clearInterval(pollTimer);
   pollTimer = null;
@@ -241,6 +285,7 @@ async function connect() {
     connected = true;
     await transport.send("HELLO");
     macroPage.setConnection();
+    xboxPanel.render();
     pollTimer = window.setInterval(() => {
       if (!pendingReply && !macroPage.busy) {
         transport?.send("STATUS").catch(onUnexpectedDisconnect);
@@ -258,6 +303,7 @@ async function connect() {
 
 async function disconnect() {
   busy = true;
+  await xboxPanel?.stop("直通已停止，录制草稿仍可预览。");
   clearInterval(pollTimer);
   pollTimer = null;
   manualInputState.clear();
@@ -273,6 +319,7 @@ async function disconnect() {
     transport = null;
     busy = false;
     macroPage.setConnection();
+    xboxPanel.render();
     render();
   }
 }
@@ -367,6 +414,7 @@ window.addEventListener("keydown", (event) => {
     !control ||
     !connected ||
     busy ||
+    xboxPanel?.active || xboxPanel?.stopping ||
     currentRoute !== "home" ||
     event.target?.closest?.("input,select,textarea,[contenteditable]") ||
     event.metaKey ||
@@ -395,10 +443,15 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-function renderRoute() {
+async function renderRoute() {
+  const requestedHash = window.location.hash;
   const route = window.location.hash.slice(1) || "/";
   currentRoute = route === "/macros/1" ? "macro-edit" :
     route === "/macros" ? "macros" : "home";
+  if (currentRoute !== "home" && (xboxPanel?.active || xboxPanel?.stopping)) {
+    await xboxPanel.stop("离开控制台，直通已停止。");
+    if (window.location.hash !== requestedHash) return;
+  }
   if (currentRoute !== "home") manualInputState.clear();
   for (const view of document.querySelectorAll("[data-route-view]")) {
     view.hidden = view.dataset.routeView !== currentRoute;

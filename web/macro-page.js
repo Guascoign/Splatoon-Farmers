@@ -20,6 +20,7 @@ export class MacroPage {
     this.macro = null;
     this.summary = null;
     this.storage = "unknown";
+    this.recordingDraft = false;
 
     this.listMessage = document.querySelector('[data-testid="macro-list-message"]');
     this.editMessage = document.querySelector('[data-testid="macro-edit-message"]');
@@ -31,6 +32,7 @@ export class MacroPage {
     this.addStepButton = document.querySelector('[data-testid="macro-add-step"]');
     this.restoreButton = document.querySelector('[data-testid="macro-restore"]');
     this.formatButton = document.querySelector('[data-testid="macro-format-button"]');
+    this.discardButton = document.querySelector('[data-testid="macro-discard-recording"]');
 
     this.loopGapInput.addEventListener("input", () => {
       if (this.busy || !this.macro) return;
@@ -56,6 +58,7 @@ export class MacroPage {
     this.saveButton.addEventListener("click", () => this.save());
     this.restoreButton.addEventListener("click", () => this.restore());
     this.formatButton.addEventListener("click", () => this.formatStorage());
+    this.discardButton.addEventListener("click", () => this.discardRecording());
     this.renderColors();
     this.renderControls();
   }
@@ -76,7 +79,9 @@ export class MacroPage {
       this.loadForRoute();
     } else {
       this.message(this.listMessage, "连接设备后读取宏槽位。");
-      this.message(this.editMessage, "连接设备后读取宏内容。");
+      this.message(this.editMessage, this.recordingDraft
+        ? "录制草稿仍在此页；重新连接设备后可以保存。"
+        : "连接设备后读取宏内容。");
     }
   }
 
@@ -86,7 +91,36 @@ export class MacroPage {
       return;
     }
     if (this.route === "macros") this.loadList();
-    if (this.route === "macro-edit") this.loadDetail();
+    if (this.route === "macro-edit") {
+      if (this.recordingDraft) {
+        this.renderEditor();
+        this.message(this.editMessage,
+          "正在预览录制草稿。可微调动作，再保存到槽位 01 的 Flash。", "success");
+      } else this.loadDetail();
+    }
+  }
+
+  importRecording(steps) {
+    this.recordingDraft = true;
+    this.macro = {
+      source: "recording",
+      loopGapMs: Number(this.summary?.loop_gap_ms ?? 1000),
+      color: Number(this.summary?.color ?? 0),
+      steps: steps.map((step) => ({ ...step })),
+    };
+    this.renderEditor();
+    this.message(this.editMessage,
+      `已录制 ${steps.length} 步，当前是未保存草稿。请检查后保存到 Flash。`, "success");
+  }
+
+  discardRecording() {
+    if (!this.recordingDraft) return;
+    this.recordingDraft = false;
+    this.macro = null;
+    this.stepList.innerHTML = "";
+    this.renderControls();
+    if (this.isConnected()) this.loadDetail();
+    else this.message(this.editMessage, "录制草稿已放弃，连接设备后读取板载宏。");
   }
 
   finishBusy() {
@@ -245,12 +279,16 @@ export class MacroPage {
 
   renderControls() {
     const disabled = !this.isConnected() || this.busy || this.isRunning();
-    this.editFields.disabled = !this.isConnected() || this.busy || !this.macro;
-    this.addStepButton.disabled = !this.isConnected() || this.busy || !this.macro ||
+    this.editFields.disabled = (!this.isConnected() && !this.recordingDraft) ||
+      this.busy || !this.macro;
+    this.addStepButton.disabled = (!this.isConnected() && !this.recordingDraft) ||
+      this.busy || !this.macro ||
       this.macro.steps.length >= MAX_MACRO_STEPS;
     this.saveButton.disabled = disabled || !this.macro;
     this.restoreButton.disabled = disabled;
     this.formatButton.disabled = disabled;
+    this.discardButton.hidden = !this.recordingDraft;
+    this.discardButton.disabled = this.busy;
     this.saveButton.textContent = this.busy ? "处理中…" : "保存到 Flash";
   }
 
@@ -277,6 +315,7 @@ export class MacroPage {
       }
       await this.request(`MACRO_COMMIT ${macroChecksum(snapshot)}`, "ack");
       committed = true;
+      this.recordingDraft = false;
       this.macro.source = "flash";
       const list = await this.request("MACRO_LIST", "macro_list");
       this.summary = list.slots?.[0] ?? null;
@@ -306,6 +345,7 @@ export class MacroPage {
       await this.request("MACRO_RESTORE", "ack");
       const detail = await this.request("MACRO_GET", "macro");
       this.macro = normalizeMacro(detail);
+      this.recordingDraft = false;
       this.renderEditor();
       const list = await this.request("MACRO_LIST", "macro_list");
       this.summary = list.slots?.[0] ?? null;

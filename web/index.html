@@ -11,6 +11,7 @@
     <title>Splatoon Farmers · Material Raid Console</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./macro-editor.css" />
+    <link rel="stylesheet" href="./xbox-panel.css" />
   </head>
   <body>
     <div class="ambient-ink ambient-ink-teal" aria-hidden="true"></div>
@@ -401,6 +402,89 @@
         </div>
       </section>
 
+      <section class="xbox-section" data-testid="xbox-panel" hidden aria-labelledby="xbox-title">
+        <div class="xbox-heading">
+          <div>
+            <p class="eyebrow">GAMEPAD BRIDGE / 电脑端</p>
+            <h2 id="xbox-title">Xbox 输入，映射成 Switch 手柄。</h2>
+            <p>手柄先连接 Windows。网页读取手柄后，经 USB-UART 把操作送到 ESP32；录制时同一份操作会生成槽位 01 的草稿。</p>
+          </div>
+          <label class="xbox-device-label"><span>当前手柄</span><select data-testid="xbox-device" aria-label="选择 Xbox 手柄"></select></label>
+        </div>
+
+        <div class="xbox-bind-panel">
+          <div class="xbox-bind-head">
+            <div><strong>键位绑定</strong><p data-testid="xbox-binding-hint">点击左侧 Xbox 键位，再点击右侧 Switch 键位进行绑定。</p></div>
+            <div class="xbox-bind-actions">
+              <button type="button" data-testid="xbox-unbind" disabled>取消所选键绑定</button>
+              <button type="button" data-testid="xbox-reset-bindings">恢复默认映射</button>
+            </div>
+          </div>
+          <div class="xbox-pad-grid">
+            <div class="xbox-pad-column">
+              <div class="xbox-pad-title"><span>INPUT 01</span><strong>Xbox Wireless</strong></div>
+              <div class="controller-pad xbox-pad" aria-label="Xbox 手柄键位">
+                <button type="button" class="pad-key key-lt" data-source-key="LT">LT</button>
+                <button type="button" class="pad-key key-rt" data-source-key="RT">RT</button>
+                <button type="button" class="pad-key key-lb" data-source-key="LB">LB</button>
+                <button type="button" class="pad-key key-rb" data-source-key="RB">RB</button>
+                <button type="button" class="pad-key key-ls stick-key" data-source-key="LS" aria-label="按下左摇杆 LS">LS</button>
+                <button type="button" class="pad-key key-rs stick-key" data-source-key="RS" aria-label="按下右摇杆 RS">RS</button>
+                <button type="button" class="pad-key key-up dpad-key" data-source-key="UP">↑</button>
+                <button type="button" class="pad-key key-right dpad-key" data-source-key="RIGHT">→</button>
+                <button type="button" class="pad-key key-down dpad-key" data-source-key="DOWN">↓</button>
+                <button type="button" class="pad-key key-left dpad-key" data-source-key="LEFT">←</button>
+                <button type="button" class="pad-key key-y face-key" data-source-key="Y">Y</button>
+                <button type="button" class="pad-key key-x face-key" data-source-key="X">X</button>
+                <button type="button" class="pad-key key-b face-key" data-source-key="B">B</button>
+                <button type="button" class="pad-key key-a face-key" data-source-key="A">A</button>
+                <button type="button" class="pad-key key-view small-key" data-source-key="VIEW" aria-label="View">▣</button>
+                <button type="button" class="pad-key key-menu small-key" data-source-key="MENU" aria-label="Menu">☰</button>
+                <button type="button" class="pad-key key-guide small-key" data-source-key="GUIDE" aria-label="Xbox 主键">ⓧ</button>
+                <button type="button" class="pad-key key-share small-key" data-source-key="SHARE" aria-label="分享键">⇧</button>
+              </div>
+            </div>
+            <div class="xbox-pad-column">
+              <div class="xbox-pad-title"><span>OUTPUT 01</span><strong>Nintendo Switch</strong></div>
+              <div class="controller-pad switch-pad" aria-label="Switch 手柄键位">
+                <button type="button" class="pad-key key-lt" data-target-key="ZL">ZL</button>
+                <button type="button" class="pad-key key-rt" data-target-key="ZR">ZR</button>
+                <button type="button" class="pad-key key-lb" data-target-key="L">L</button>
+                <button type="button" class="pad-key key-rb" data-target-key="R">R</button>
+                <button type="button" class="pad-key key-ls stick-key" data-target-key="L_STICK_PRESS" aria-label="按下左摇杆">L</button>
+                <button type="button" class="pad-key key-rs stick-key" data-target-key="R_STICK_PRESS" aria-label="按下右摇杆">R</button>
+                <button type="button" class="pad-key key-up dpad-key" data-target-key="DPAD_UP">↑</button>
+                <button type="button" class="pad-key key-right dpad-key" data-target-key="DPAD_RIGHT">→</button>
+                <button type="button" class="pad-key key-down dpad-key" data-target-key="DPAD_DOWN">↓</button>
+                <button type="button" class="pad-key key-left dpad-key" data-target-key="DPAD_LEFT">←</button>
+                <button type="button" class="pad-key key-y face-key" data-target-key="X">X</button>
+                <button type="button" class="pad-key key-x face-key" data-target-key="Y">Y</button>
+                <button type="button" class="pad-key key-b face-key" data-target-key="A">A</button>
+                <button type="button" class="pad-key key-a face-key" data-target-key="B">B</button>
+                <button type="button" class="pad-key key-view small-key" data-target-key="MINUS" aria-label="减号">−</button>
+                <button type="button" class="pad-key key-menu small-key" data-target-key="PLUS" aria-label="加号">＋</button>
+                <button type="button" class="pad-key key-guide small-key" data-target-key="HOME" aria-label="主页键">⌂</button>
+                <button type="button" class="pad-key key-share small-key" data-target-key="CAPTURE" aria-label="截图键">□</button>
+              </div>
+            </div>
+          </div>
+          <p class="xbox-axis-note">摇杆方向固定为左对左、右对右；点击摇杆圆盘绑定的是摇杆按下键。Xbox 主键和分享键能否被网页读取取决于浏览器与驱动。</p>
+          <div class="xbox-binding-list" data-testid="xbox-binding-list" aria-label="当前键位映射"></div>
+        </div>
+
+        <div class="xbox-live-panel">
+          <div class="xbox-live-status"><strong data-testid="xbox-status" role="status">等待 Xbox 手柄。</strong><span>当前输出：<b data-testid="xbox-output">中立</b></span></div>
+          <div class="xbox-live-actions">
+            <button class="button button-primary" type="button" data-testid="xbox-start">开始直通</button>
+            <button class="button button-stop" type="button" data-testid="xbox-stop" disabled>停止直通</button>
+            <button class="button button-secondary" type="button" data-testid="xbox-record" disabled>开始录制</button>
+            <button class="button button-primary" type="button" data-testid="xbox-finish" disabled>结束录制并预览</button>
+          </div>
+          <p class="xbox-record-info" data-testid="xbox-record-info" hidden></p>
+          <p class="xbox-save-note">录制停止后会打开槽位 01 草稿。检查动作和时长，再点“保存到 Flash”；最多 128 步。</p>
+        </div>
+      </section>
+
       <section class="wiring" aria-labelledby="wiring-title">
         <div class="wiring-copy">
           <p class="eyebrow">GEAR CHECK / 双链路</p>
@@ -478,6 +562,7 @@
           <div class="macro-step-list" data-testid="macro-step-list"></div>
           </fieldset>
           <div class="macro-editor-actions">
+            <button class="button button-secondary" type="button" data-testid="macro-discard-recording" hidden>放弃录制草稿</button>
             <button class="button button-secondary" type="button" data-testid="macro-add-step">＋ 添加动作</button>
             <button class="button button-stop" type="button" data-testid="macro-restore">恢复内置</button>
             <button class="button button-primary" type="button" data-testid="macro-save">保存到 Flash</button>

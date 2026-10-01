@@ -280,7 +280,7 @@ export class MockSerialTransport {
           this.onLine("OK");
         }
       }
-    } else if (/^R \d+ \d+ \d+ \d+ \d+ \d+$/.test(command)) {
+    } else if (/^[RG] \d+ \d+ \d+ \d+ \d+ \d+$/.test(command)) {
       this.state = "idle";
       this.phase = "idle";
       this.step = 0;
