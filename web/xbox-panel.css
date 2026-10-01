@@ -1,0 +1,103 @@
+.xbox-section { padding:28px 0 78px; }
+.xbox-heading { display:flex; align-items:end; justify-content:space-between; gap:24px; margin-bottom:22px; }
+.xbox-heading h2 { max-width:720px; margin:10px 0 12px; font-size:clamp(1.9rem,3.4vw,3rem); letter-spacing:-.045em; }
+.xbox-heading p:last-child { max-width:740px; color:var(--paper-muted); line-height:1.7; }
+.xbox-device-label { display:grid; flex:0 0 min(270px,30%); gap:8px; color:var(--paper-muted); font-size:.77rem; font-weight:900; }
+.xbox-device-label select { width:100%; min-width:0; padding:12px; border:1px solid #397267; border-radius:10px; background:#071d19; color:var(--paper); }
+.xbox-bind-panel { padding:22px; border:1px solid rgba(30,224,189,.35); border-radius:24px; background:linear-gradient(145deg,#10372e,#08231d); }
+.xbox-bind-head { display:flex; justify-content:space-between; align-items:start; gap:16px; }
+.xbox-bind-head strong { font-size:1.13rem; }
+.xbox-bind-head p { margin:7px 0 0; color:var(--paper-muted); font-size:.83rem; line-height:1.55; }
+.xbox-bind-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+.xbox-bind-actions button { padding:9px 12px; border:1px solid #3b7163; border-radius:9px; background:#123c32; color:var(--paper); font-size:.73rem; font-weight:800; cursor:pointer; }
+.xbox-bind-actions button:hover:not(:disabled) { border-color:var(--yellow); }
+.xbox-bind-actions button:disabled { opacity:.4; cursor:not-allowed; }
+.xbox-pad-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:20px; }
+.xbox-pad-column { min-width:0; padding:13px; border:1px solid var(--line); border-radius:18px; background:#071d19; }
+.xbox-pad-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 5px 12px; }
+.xbox-pad-title span { color:var(--teal); font-size:.66rem; font-weight:900; letter-spacing:.14em; }
+.xbox-pad-title strong { color:var(--paper); font-size:.88rem; }
+.controller-pad { position:relative; height:clamp(235px,25vw,310px); border:2px solid #477a6d; border-radius:45% 45% 30% 30% / 48% 48% 35% 35%; background:radial-gradient(circle at 50% 30%,#285749,#13392f 58%,#0c2822); box-shadow:inset 0 -18px 26px rgba(0,0,0,.23),0 12px 24px rgba(0,0,0,.22); }
+.switch-pad { border-color:#668176; background:radial-gradient(circle at 50% 30%,#395950,#19332e 60%,#102622); }
+.controller-pad::before { content:""; position:absolute; inset:16% 34% 12%; border:1px solid rgba(245,223,33,.11); border-radius:40%; pointer-events:none; }
+.pad-key { position:absolute; display:grid; place-items:center; width:36px; height:36px; padding:0; transform:translate(-50%,-50%); border:2px solid #6ba895; border-radius:50%; background:#0c2e26; color:var(--paper); font-family:inherit; font-size:.78rem; font-weight:900; line-height:1; cursor:pointer; z-index:1; transition:transform .12s,border-color .12s,box-shadow .12s; }
+.pad-key:hover { transform:translate(-50%,-50%) scale(1.12); border-color:var(--yellow); }
+.pad-key:focus-visible { outline:3px solid var(--yellow); outline-offset:3px; }
+.pad-key[data-selected="true"] { border-color:var(--yellow); background:#786a12; box-shadow:0 0 0 4px rgba(245,223,33,.22); }
+.pad-key[data-mapped="true"] { border-color:var(--yellow); box-shadow:0 0 0 4px rgba(245,223,33,.15); }
+.pad-key[data-active="true"] { border-color:#42ffb7; background:#087d56; box-shadow:0 0 15px rgba(66,255,183,.7); }
+.pad-key.face-key { width:39px; height:39px; font-size:.95rem; }
+.xbox-pad [data-source-key="A"] { color:#91da72; }
+.xbox-pad [data-source-key="B"] { color:#ff8c7b; }
+.xbox-pad [data-source-key="X"] { color:#69c8ff; }
+.xbox-pad [data-source-key="Y"] { color:#fff178; }
+.pad-key.stick-key { width:61px; height:61px; border-color:#738f82; background:radial-gradient(circle at 40% 35%,#546c62,#1b302a 66%); font-size:.69rem; }
+.stick-key::before { content:""; position:absolute; inset:8px; border:1px dashed rgba(201,232,219,.35); border-radius:50%; pointer-events:none; }
+.stick-key .stick-dot { position:absolute; top:42%; left:50%; width:20px; height:20px; border:2px solid #b9e6d7; border-radius:50%; background:radial-gradient(circle at 34% 28%,#b9d4c5,#38584c 62%,#203a32); box-shadow:0 3px 8px rgba(0,0,0,.4); transform:translate(calc(-50% + var(--stick-x,0px)),calc(-50% + var(--stick-y,0px))); transition:transform 35ms linear; pointer-events:none; }
+.stick-key .stick-press-center { position:absolute; top:42%; left:50%; display:grid; place-items:center; width:26px; height:26px; border:2px solid #b9e6d7; border-radius:50%; background:#244b3e; color:#fff; font-size:.58rem; font-weight:900; transform:translate(calc(-50% + var(--stick-x,0px)),calc(-50% + var(--stick-y,0px))); transition:transform 35ms linear; pointer-events:auto; }
+.stick-press-center[data-selected="true"],.stick-press-center[data-mapped="true"] { border-color:var(--yellow); background:#786a12; }
+.stick-press-center[data-active="true"] { border-color:#42ffb7; background:#0cab75; box-shadow:0 0 16px #42ffb7; }
+.stick-key .stick-caption { position:absolute; bottom:4px; left:0; right:0; color:#d1e7dd; font-size:.57rem; font-weight:800; text-shadow:0 1px 3px #00160f; pointer-events:none; }
+.stick-key[data-active="true"] .stick-dot { border-color:#e5ff7e; background:radial-gradient(circle at 34% 28%,#efffb2,#5eaa6b 65%,#206d50); }
+.pad-key.press-key { width:26px; height:26px; border-color:#99b4a8; font-size:.58rem; }
+.pad-key.dpad-key { width:29px; height:29px; border-radius:8px; font-size:.93rem; }
+.pad-key.small-key { width:28px; height:28px; font-size:.78rem; }
+.pad-key.key-lt { left:18%; top:6%; border-radius:10px; }
+.pad-key.key-rt { left:82%; top:6%; border-radius:10px; }
+.pad-key.key-lb { left:18%; top:19%; border-radius:10px; }
+.pad-key.key-rb { left:82%; top:19%; border-radius:10px; }
+.pad-key.key-ls { left:29%; top:42%; }
+.pad-key.key-rs { left:68%; top:71%; }
+.pad-key.key-ls-press { left:41%; top:56%; }
+.pad-key.key-rs-press { left:82%; top:83%; }
+.pad-key.key-up { left:29%; top:69%; }
+.pad-key.key-right { left:35%; top:77%; }
+.pad-key.key-down { left:29%; top:85%; }
+.pad-key.key-left { left:23%; top:77%; }
+.pad-key.key-y { left:79%; top:35%; }
+.pad-key.key-x { left:72%; top:43%; }
+.pad-key.key-b { left:86%; top:43%; }
+.pad-key.key-a { left:79%; top:51%; }
+.pad-key.key-view { left:43%; top:43%; }
+.pad-key.key-menu { left:57%; top:43%; }
+.pad-key.key-guide { left:50%; top:31%; }
+.pad-key.key-share { left:50%; top:57%; }
+.xbox-axis-note { margin:14px 3px 10px; color:var(--paper-muted); font-size:.74rem; line-height:1.6; }
+.xbox-binding-list { display:flex; flex-wrap:wrap; gap:7px; margin-top:15px; }
+.xbox-binding-list span { padding:7px 9px; border:1px solid #305e51; border-radius:7px; background:#092a23; color:var(--paper-muted); font-size:.69rem; font-weight:800; }
+.xbox-binding-list span[data-selected="true"] { border-color:var(--yellow); color:var(--yellow); }
+.xbox-live-panel { display:grid; gap:15px; margin-top:17px; padding:19px 22px; border:1px solid var(--line); border-radius:18px; background:#0a2922; }
+.xbox-live-status { display:flex; justify-content:space-between; align-items:center; gap:15px; }
+.xbox-live-status strong { color:var(--yellow); font-size:.94rem; }
+.xbox-live-status span { color:var(--paper-muted); font-size:.78rem; }
+.xbox-live-status b { color:var(--paper); }
+.xbox-live-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.xbox-live-actions .button { min-width:130px; }
+.xbox-live-actions .button:disabled { opacity:.42; cursor:not-allowed; }
+.xbox-record-setting { display:flex; align-items:center; flex-wrap:wrap; gap:10px; color:var(--paper-muted); font-size:.76rem; font-weight:800; }
+.xbox-record-setting select { padding:8px 10px; border:1px solid #397267; border-radius:9px; background:#071d19; color:var(--paper); font:inherit; }
+.xbox-record-info { margin:0; color:#fff59b; font-size:.8rem; font-weight:900; }
+.xbox-save-note { margin:0; color:var(--paper-muted); font-size:.76rem; line-height:1.6; }
+@media(max-width:850px) {
+  .xbox-heading { display:grid; }
+  .xbox-device-label { width:min(100%,320px); }
+  .xbox-pad-grid { grid-template-columns:1fr; }
+  .controller-pad { height:300px; }
+}
+@media(max-width:550px) {
+  .xbox-bind-panel { padding:14px; }
+  .xbox-bind-head { display:grid; }
+  .xbox-bind-actions { justify-content:flex-start; }
+  .xbox-pad-column { padding:8px; }
+  .controller-pad { height:235px; }
+  .pad-key { width:30px; height:30px; font-size:.68rem; }
+  .pad-key.face-key { width:32px; height:32px; }
+  .pad-key.stick-key { width:48px; height:48px; }
+  .stick-key::before { inset:5px; }
+  .stick-key .stick-dot { width:16px; height:16px; }
+  .stick-key .stick-caption { bottom:2px; font-size:.47rem; }
+  .pad-key.press-key { width:23px; height:23px; font-size:.53rem; }
+  .pad-key.dpad-key { width:24px; height:24px; }
+  .pad-key.small-key { width:24px; height:24px; }
+  .xbox-live-status { display:grid; }
+}
