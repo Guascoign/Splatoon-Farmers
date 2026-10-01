@@ -1,5 +1,6 @@
 import { DEVICE_BAUD_RATE, parseDeviceLine } from "./protocol.js";
-import { macroChecksum } from "./macro-editor.js";
+import { MACRO_SLOT_COUNT, MAX_SLOT_IMAGE_BYTES, macroChecksum } from "./macro-editor.js";
+import { imageChecksum } from "./slot-image.js";
 import { MOCK_BUILTIN_STEPS } from "./mock-macro.js";
 
 // The page served by the ESP32 uses the same commands as the USB-UART link.
@@ -138,6 +139,7 @@ export class SerialTransport {
 
   async readLoop() {
     let buffered = "";
+    const decoder = new TextDecoder();
     try {
       while (this.connected && this.port?.readable) {
         this.reader = this.port.readable.getReader();
@@ -147,7 +149,7 @@ export class SerialTransport {
             if (done) {
               break;
             }
-            buffered += new TextDecoder().decode(value, { stream: true });
+            buffered += decoder.decode(value, { stream: true });
             const lines = buffered.split(/\r?\n/);
             buffered = lines.pop() ?? "";
             for (const line of lines) {
@@ -186,11 +188,13 @@ export class MockSerialTransport {
     this.step = 0;
     this.cycle = 0;
     this.lastReport = null;
-    this.macroSteps = MOCK_BUILTIN_STEPS.map((step) => [...step]);
-    this.macroGap = 2585;
-    this.macroColor = 0;
-    this.macroSource = "builtin";
+    this.slots = Array.from({ length: MACRO_SLOT_COUNT }, (_, slot) => slot === 0
+      ? { name: "素材远征", source: "builtin", steps: MOCK_BUILTIN_STEPS.map((step) => [...step]),
+        gap: 2585, color: 0, image: null }
+      : { name: "", source: "empty", steps: [], gap: 0, color: 0, image: null });
+    this.activeSlot = 0;
     this.staged = null;
+    this.imageStaged = null;
   }
 
   static isSupported() {
@@ -205,11 +209,17 @@ export class MockSerialTransport {
     if (!this.connected) {
       throw new Error("模拟串口尚未连接");
     }
-    if (command === "START") {
-      this.state = "running";
-      this.phase = "steps";
-      this.step = 1;
-      this.emit("status");
+    if (/^START(?: \d+)?$/.test(command)) {
+      const slot = Number(command.split(" ")[1] ?? 0);
+      if (!this.slots[slot] || this.slots[slot].source === "empty") {
+        this.onLine("ERR macro-empty");
+      } else {
+        this.activeSlot = slot;
+        this.state = "running";
+        this.phase = "steps";
+        this.step = 1;
+        this.emit("status");
+      }
     } else if (command === "STOP") {
       this.state = "idle";
       this.phase = "idle";
@@ -222,34 +232,62 @@ export class MockSerialTransport {
     } else if (command === "PING") {
       this.onLine("PONG");
     } else if (command === "MACRO_LIST") {
-      const duration = this.macroSteps.reduce((total, step) => total + step[0], 0);
+      const slots = this.slots.map((item, slot) => {
+        const imageBytes = item.image ? item.image.length + 14 : 0;
+        const macroBytes = item.source === "flash" ? 20 +
+          new TextEncoder().encode(item.name).length + item.steps.length * 11 : 0;
+        return { slot, name: item.name, source: item.source,
+          steps: item.steps.length,
+          duration_ms: item.steps.reduce((total, step) => total + step[0], 0),
+          loop_gap_ms: item.gap, color: item.color,
+          used_bytes: macroBytes + imageBytes, image_bytes: imageBytes,
+          image_size: item.image?.length || 0 };
+      });
       this.onLine(JSON.stringify({ type: "macro_list", ok: true, storage: "ready",
-        slots: [{ slot: 0, name: "素材远征", source: this.macroSource,
-          steps: this.macroSteps.length, duration_ms: duration,
-          loop_gap_ms: this.macroGap, color: this.macroColor }] }));
-    } else if (command === "MACRO_GET") {
-      this.onLine(JSON.stringify({ type: "macro", ok: true, slot: 0,
-        source: this.macroSource, loop_gap_ms: this.macroGap,
-        color: this.macroColor, steps: this.macroSteps }));
+        used_bytes: slots.reduce((total, slot) => total + slot.used_bytes, 0),
+        total_bytes: 3538944, slots }));
+    } else if (/^MACRO_GET(?: \d+)?$/.test(command)) {
+      const slot = Number(command.split(" ")[1] ?? 0);
+      const item = this.slots[slot];
+      if (!item || item.source === "empty") this.onLine("ERR macro-empty");
+      else this.onLine(JSON.stringify({ type: "macro", ok: true, slot,
+        name: item.name, source: item.source, loop_gap_ms: item.gap,
+        color: item.color, steps: item.steps }));
     } else if (command === "MACRO_ABORT") {
       this.staged = null;
       this.onLine("OK");
-    } else if (command === "MACRO_RESTORE") {
-      this.macroSteps = MOCK_BUILTIN_STEPS.map((step) => [...step]);
-      this.macroGap = 2585;
-      this.macroColor = 0;
-      this.macroSource = "builtin";
-      this.onLine("OK");
+    } else if (/^MACRO_RESTORE(?: \d+)?$/.test(command)) {
+      const slot = Number(command.split(" ")[1] ?? 0);
+      if (!this.slots[slot]) this.onLine("ERR invalid-slot");
+      else {
+        const image = this.slots[slot].image;
+        this.slots[slot] = slot === 0
+          ? { name: "素材远征", source: "builtin",
+            steps: MOCK_BUILTIN_STEPS.map((step) => [...step]), gap: 2585,
+            color: 0, image }
+          : { name: "", source: "empty", steps: [], gap: 0, color: 0, image };
+        this.onLine("OK");
+      }
     } else if (command === "MACRO_STORAGE_FORMAT") {
       this.onLine("ERR storage-already-ready");
     } else if (command.startsWith("MACRO_BEGIN ")) {
       const values = command.split(" ").slice(1).map(Number);
-      if (values.length !== 3 || values.some((value) => !Number.isInteger(value)) ||
-          values[0] < 1 || values[0] > 128 || values[1] < 0 || values[1] > 600000 ||
-          values[2] < 0 || values[2] > 5) {
+      if (values.length !== 4 || values.some((value) => !Number.isInteger(value)) ||
+          values[0] < 0 || values[0] >= MACRO_SLOT_COUNT ||
+          values[1] < 1 || values[1] > 128 ||
+          values[2] < 0 || values[2] > 600000 || values[3] < 0 || values[3] > 5) {
         this.onLine("ERR invalid-macro-begin");
       } else {
-        this.staged = { steps: Array(values[0]).fill(null), loopGapMs: values[1], color: values[2] };
+        this.staged = { slot: values[0], steps: Array(values[1]).fill(null),
+          loopGapMs: values[2], color: values[3], name: `宏槽位 ${String(values[0] + 1).padStart(2, "0")}` };
+        this.onLine("OK");
+      }
+    } else if (command.startsWith("MACRO_NAME ")) {
+      if (!this.staged || !/^(?:[0-9a-f]{2}){1,48}$/i.test(command.slice(11))) {
+        this.onLine("ERR invalid-macro-name");
+      } else {
+        const values = command.slice(11).match(/.{2}/g).map((pair) => parseInt(pair, 16));
+        this.staged.name = new TextDecoder().decode(new Uint8Array(values));
         this.onLine("OK");
       }
     } else if (command.startsWith("MACRO_STEP ")) {
@@ -272,13 +310,67 @@ export class MockSerialTransport {
         if (macroChecksum(macro) !== Number(command.split(" ")[1])) {
           this.onLine("ERR macro-checksum");
         } else {
-          this.macroSteps = this.staged.steps.map((step) => [...step]);
-          this.macroGap = this.staged.loopGapMs;
-          this.macroColor = this.staged.color;
-          this.macroSource = "flash";
+          this.slots[this.staged.slot] = { name: this.staged.name, source: "flash",
+            steps: this.staged.steps.map((step) => [...step]),
+            gap: this.staged.loopGapMs, color: this.staged.color,
+            image: this.slots[this.staged.slot].image };
           this.staged = null;
           this.onLine("OK");
         }
+      }
+    } else if (/^SLOT_IMAGE_INFO \d+$/.test(command)) {
+      const slot = Number(command.split(" ")[1]);
+      const image = this.slots[slot]?.image;
+      if (!this.slots[slot]) this.onLine("ERR invalid-slot");
+      else this.onLine(JSON.stringify({ type: "slot_image_info", ok: true,
+        slot, exists: Boolean(image), bytes: image?.length || 0 }));
+    } else if (/^SLOT_IMAGE_READ \d+ \d+$/.test(command)) {
+      const [, slotRaw, offsetRaw] = command.split(" ");
+      const image = this.slots[Number(slotRaw)]?.image;
+      const offset = Number(offsetRaw);
+      if (!image || offset >= image.length) this.onLine("ERR image-read-failed");
+      else this.onLine(JSON.stringify({ type: "slot_image_chunk", ok: true, offset,
+        data: [...image.subarray(offset, offset + 80)]
+          .map((byte) => byte.toString(16).padStart(2, "0")).join("") }));
+    } else if (command.startsWith("SLOT_IMAGE_BEGIN ")) {
+      const values = command.split(" ").slice(1).map(Number);
+      if (values.length !== 3 || !this.slots[values[0]] ||
+          values[1] < 1 || values[1] > MAX_SLOT_IMAGE_BYTES ||
+          values.some((value) => !Number.isInteger(value)))
+        this.onLine("ERR invalid-image-begin");
+      else {
+        this.imageStaged = { slot: values[0], bytes: values[1],
+          checksum: values[2], data: [] };
+        this.onLine("OK");
+      }
+    } else if (command.startsWith("SLOT_IMAGE_CHUNK ")) {
+      const hex = command.slice(17);
+      if (!this.imageStaged || !/^(?:[0-9a-f]{2}){1,96}$/i.test(hex) ||
+          this.imageStaged.data.length + hex.length / 2 > this.imageStaged.bytes)
+        this.onLine("ERR invalid-image-chunk");
+      else {
+        this.imageStaged.data.push(...hex.match(/.{2}/g).map((pair) => parseInt(pair, 16)));
+        this.onLine("OK");
+      }
+    } else if (command === "SLOT_IMAGE_COMMIT") {
+      const staged = this.imageStaged;
+      if (!staged || staged.data.length !== staged.bytes ||
+          imageChecksum(staged.data) !== staged.checksum)
+        this.onLine("ERR image-commit-failed");
+      else {
+        this.slots[staged.slot].image = new Uint8Array(staged.data);
+        this.imageStaged = null;
+        this.onLine("OK");
+      }
+    } else if (command === "SLOT_IMAGE_ABORT") {
+      this.imageStaged = null;
+      this.onLine("OK");
+    } else if (/^SLOT_IMAGE_DELETE \d+$/.test(command)) {
+      const slot = Number(command.split(" ")[1]);
+      if (!this.slots[slot]) this.onLine("ERR invalid-slot");
+      else {
+        this.slots[slot].image = null;
+        this.onLine("OK");
       }
     } else if (/^[RG] \d+ \d+ \d+ \d+ \d+ \d+$/.test(command)) {
       this.state = "idle";
@@ -296,6 +388,8 @@ export class MockSerialTransport {
   }
 
   emit(type) {
+    const macro = this.slots[this.activeSlot];
+    const duration = macro.steps.reduce((total, step) => total + step[0], 0);
     this.onLine(
       JSON.stringify({
         type,
@@ -306,13 +400,14 @@ export class MockSerialTransport {
         state: this.state,
         phase: this.phase,
         step: this.step,
-        steps: this.macroSteps.length,
+        steps: macro.steps.length,
         cycle: this.cycle,
-        duration_ms: this.macroSteps.reduce((total, step) => total + step[0], 0),
-        loop_gap_ms: this.macroGap,
-        cycle_ms: this.macroSteps.reduce((total, step) => total + step[0], 0) + this.macroGap,
-        source: this.macroSource,
-        color: this.macroColor,
+        duration_ms: duration,
+        loop_gap_ms: macro.gap,
+        cycle_ms: duration + macro.gap,
+        slot: this.activeSlot,
+        source: macro.source,
+        color: macro.color,
         macro_storage: "ready",
       }),
     );

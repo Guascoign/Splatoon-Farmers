@@ -25,15 +25,16 @@ Required gears described in this video: [Bilibili](https://www.bilibili.com/vide
   control page at <http://192.168.9.1> without a computer or internet.
 - Continues a running loop if the browser, Wi-Fi, or USB-UART connection drops.
 - Starts, stops, and reports progress through Wi-Fi HTTP or Web Serial.
-- Exposes one editable macro slot. The compiled 48-step routine is the fallback;
-  a saved Flash version takes priority on the next boot.
+- Exposes 12 named macro slots. Slot 01 keeps the compiled 48-step fallback;
+  saved Flash versions take priority on the next boot.
 - Uses the onboard GPIO48 WS2812 to show startup, connection, running macro,
   and controller output states.
-- Provides every digital controller button and D-pad direction for mouse,
-  touch, and keyboard input.
-- On the desktop Web Serial page, maps a Windows-paired Xbox Wireless Controller
-  to the Switch report and records live play into a slot 01 draft.
-- Leaves both analog sticks centered during manual input.
+- Provides every digital button, D-pad direction, and two draggable analog
+  sticks for mouse, touch, and keyboard input on the separate control page.
+- On the desktop Web Serial recording page, maps a Windows-paired Xbox Wireless
+  Controller to the Switch report and records live play into a named draft.
+- Stores one JPEG loadout image per slot in board Flash; JSON export includes
+  the image and JSON import restores it when the draft is saved.
 
 The browser sends only high-level `START`, `STOP`, and status commands during
 automatic operation. Timing is owned by the microcontroller, so normal serial
@@ -106,21 +107,32 @@ secure context, so opening `web/index.html` directly is not supported.
 1. On the phone, wait for the board to connect automatically. On a computer,
    select **连接手柄** and choose the DevKitC-1 USB-UART port.
 2. Wait for **已连接 · 待命**.
-3. Select **开始刷取**. The routine restarts at step 1 and loops until stopped.
+3. Choose a nonempty slot and select **开始刷取**. That slot restarts at step 1
+   and loops until stopped.
 4. Select **停止** to immediately send a neutral controller report.
 
-### Edit the board macro
+### Edit board macros and loadout images
 
 Open **宏设置** from the top navigation on the onboard page or the desktop
-Web Serial page. Slot 01 shows the active source, action count, cycle duration,
-and light color. Open it to inspect every action and adjust held buttons,
+Web Serial page. The 12 slot cards show each macro's source, action count,
+cycle duration, light color, and Flash usage. The bar above them shows total
+SPIFFS usage. Open a slot to inspect every action and adjust held buttons,
 D-pad, sticks, duration, loop gap, and one of six fixed running colors. Steps
-can be added, copied, reordered, or deleted. **保存到 Flash** uploads the full
-macro transaction with a checksum; saving is disabled while the routine runs.
+can be added, copied, reordered, or deleted. Name the macro, choose its target
+slot, and select **保存到槽位**. Saving is disabled while a routine runs.
 
-The Flash override is stored as `/material-farm-slot-1.bin` in SPIFFS with a
-backup record. **恢复内置** removes this override and returns to the compiled
-48-step routine. Firmware never formats SPIFFS on boot. If mounting fails,
+Upload a loadout image from a slot card or attach one to an editor draft. The
+browser converts oversized images to JPEG, with a maximum of 64 KiB per slot.
+The image lives in SPIFFS alongside the macro and counts toward that slot's
+usage. **导出 JSON** includes the image as Base64; **宏设置 → 导入 JSON** opens an
+unsaved draft for the chosen slot. Review it before saving.
+
+Flash overrides use `/material-farm-slot-N.bin` in SPIFFS with a backup record.
+The previous version 1 file for slot 01 remains readable and is upgraded to
+version 2 when saved. **恢复内置** removes slot 01's override and returns to the
+compiled 48-step routine; other slots can be cleared separately. Restoring a
+macro keeps its image until that image is explicitly deleted. Firmware never
+formats SPIFFS on boot. If mounting fails,
 the built-in routine still runs; **初始化宏存储** is offered only in that case
 and explicitly warns that formatting erases the entire SPIFFS partition,
 including data from other firmware previously used on the board.
@@ -149,9 +161,9 @@ The Xbox/Home and Share/Capture buttons depend on what the browser exposes.
 While pass-through is active, select **开始录制** and play. A held stick position
 is merged into one step, while stick motion is sampled at the chosen interval
 (80, 220, or 350 ms). **结束录制并预览**
-releases the Switch output and opens the recorded steps as an unsaved draft in
-slot 01. You can adjust each step, loop gap, and LED color there, then select
-**保存到 Flash** to replace the slot override. Recording is limited to 128 steps;
+releases the Switch output and opens the recorded steps as an unsaved draft.
+You can name it, choose any of the 12 slots, and adjust each step, loop gap,
+and LED color before selecting **保存到槽位**. Recording is limited to 128 steps;
 the existing Flash macro is untouched until you save.
 
 The status LED is red briefly after power-on. It blinks yellow while no phone
@@ -165,9 +177,11 @@ stop it, reset the board, or remove power when you need to end it.
 
 ### Manual controls
 
-Manual input stops the automatic routine before sending a raw controller
+The **网页控制** page stops the automatic routine before sending a raw controller
 report. Buttons support hold, multi-key combinations, mouse, multitouch, and
-keyboard. Losing focus or hiding the tab releases all browser-held inputs.
+keyboard. Its two virtual analog sticks support pointer and touch dragging and
+return to center on release. Losing focus or hiding the tab releases all
+browser-held inputs.
 
 | Controller | Keyboard | Controller | Keyboard |
 | --- | --- | --- | --- |
@@ -188,17 +202,21 @@ receives a single response. Both control paths act on the same macro state.
 | Command | Behavior |
 | --- | --- |
 | `HELLO` / `INFO` | Return firmware, routine metadata, and current state as JSON |
-| `START` | Restart the board-resident routine from step 1 |
+| `START slot` | Select slot 0–11 and run it in a board-resident loop from step 1 |
 | `STOP` | Stop and send a fully neutral controller report |
 | `STATUS` | Return phase, step, cycle count, and timing |
 | `PING` | Return `PONG` |
 | `R buttons dpad lx ly rx ry` | Stop the routine and send one complete HID report |
 | `G buttons dpad lx ly rx ry` | Stream a Gamepad API report; release to neutral after 800 ms without another `G` |
-| `MACRO_LIST` / `MACRO_GET` | Read the single slot summary or complete action list |
-| `MACRO_BEGIN count gap color` | Start a staged upload for slot 01 |
+| `MACRO_LIST` / `MACRO_GET slot` | Read all 12 slot summaries and storage usage, or one complete macro |
+| `MACRO_BEGIN slot count gap color` | Start a staged upload for one slot |
+| `MACRO_NAME hex` | Set UTF-8 slot name, encoded as hexadecimal bytes (up to 48 bytes) |
 | `MACRO_STEP index duration buttons dpad lx ly rx ry` | Set one staged action |
 | `MACRO_COMMIT checksum` / `MACRO_ABORT` | Validate and save, or cancel a staged upload |
-| `MACRO_RESTORE` | Remove only this slot's Flash override |
+| `MACRO_RESTORE slot` | Remove only that slot's Flash macro; keep its image |
+| `SLOT_IMAGE_BEGIN slot bytes checksum` / `SLOT_IMAGE_CHUNK hex` / `SLOT_IMAGE_COMMIT` | Stage, validate, and save a JPEG image (up to 64 KiB) |
+| `SLOT_IMAGE_INFO slot` / `SLOT_IMAGE_READ slot offset` | Read image metadata or a hexadecimal chunk for desktop Web Serial preview and JSON export |
+| `SLOT_IMAGE_DELETE slot` | Delete that slot's loadout image |
 | `MACRO_STORAGE_FORMAT` | Explicitly format SPIFFS only after a mount failure |
 
 The raw report command keeps the firmware useful for future computer-loaded

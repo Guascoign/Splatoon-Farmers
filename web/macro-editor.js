@@ -1,6 +1,9 @@
 import { BUTTON_BITS } from "./manual-input.js";
 
 export const MAX_MACRO_STEPS = 128;
+export const MACRO_SLOT_COUNT = 12;
+export const MAX_MACRO_NAME_BYTES = 48;
+export const MAX_SLOT_IMAGE_BYTES = 65536;
 export const MIN_STEP_MS = 10;
 export const MAX_STEP_MS = 600000;
 export const MAX_LOOP_GAP_MS = 600000;
@@ -35,6 +38,7 @@ export function normalizeMacro(message) {
   const steps = Array.isArray(message?.steps) ? message.steps : [];
   return {
     source: message.source === "flash" ? "flash" : "builtin",
+    name: String(message.name ?? "素材远征"),
     loopGapMs: Number(message.loop_gap_ms ?? message.loopGapMs ?? 0),
     color: Number(message.color ?? 0),
     steps: steps.map((values) => {
@@ -54,6 +58,11 @@ export function macroDurationMs(macro) {
 }
 
 export function validateMacro(macro) {
+  const name = String(macro.name ?? "").trim();
+  if (!name || new TextEncoder().encode(name).length > MAX_MACRO_NAME_BYTES ||
+      /[\u0000-\u001f\u007f]/.test(name)) {
+    return "宏名称不能为空，且最多 48 字节（约 16 个汉字）。";
+  }
   if (!Array.isArray(macro.steps) || macro.steps.length < 1 ||
       macro.steps.length > MAX_MACRO_STEPS) {
     return `宏必须有 1–${MAX_MACRO_STEPS} 个动作。`;

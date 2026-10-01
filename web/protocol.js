@@ -12,6 +12,15 @@ const DEVICE_ERRORS = Object.freeze({
   "macro-checksum": "宏校验失败，请重试保存。",
   "macro-save-failed": "写入 Flash 失败，原有宏仍保留。",
   "restore-failed": "恢复内置宏失败。",
+  "invalid-slot": "槽位编号无效。",
+  "macro-empty": "该槽位还没有宏。",
+  "invalid-macro-name": "宏名称无效，请缩短名称或移除控制字符。",
+  "invalid-image-begin": "图片大小或目标槽位无效。",
+  "image-upload-failed": "无法在板载存储中创建图片，请检查剩余空间。",
+  "invalid-image-chunk": "图片传输数据无效，请重试。",
+  "image-commit-failed": "图片校验或写入失败，原图片仍保留。",
+  "image-read-failed": "无法读取板载配装图片。",
+  "image-delete-failed": "删除配装图片失败。",
 });
 
 export function parseDeviceLine(rawLine) {

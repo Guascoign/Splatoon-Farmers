@@ -31,6 +31,8 @@
         <div class="topbar-actions">
           <nav class="page-nav" aria-label="页面导航">
             <a href="#/" data-nav="home">控制台</a>
+            <a href="#/control" data-nav="control">网页控制</a>
+            <a href="#/record" data-nav="record">宏录制</a>
             <a href="#/macros" data-nav="macros">宏设置</a>
           </nav>
           <button class="header-connect" type="button" data-testid="header-connect-button">连接设备</button>
@@ -48,7 +50,7 @@
           </h1>
           <p class="lede">
             一键派出板载脚本，ESP32-S3 会在手柄端独立完成整轮操作。
-            网页掉线也不会截断任务，想手动接管时，按键和键盘都已就位。
+            网页掉线也不会截断任务；手动接管可从顶部的「网页控制」进入。
           </p>
           <div class="hero-tags" aria-label="功能摘要">
             <span>BOARD-RESIDENT</span>
@@ -62,7 +64,7 @@
           <div class="card-head">
             <div>
               <p class="card-kicker">CURRENT ROUTINE / 当前任务</p>
-              <h2>素材远征 · 自动循环</h2>
+              <h2 data-testid="console-routine-title">素材远征 · 自动循环</h2>
             </div>
             <div
               class="status-badge"
@@ -107,6 +109,8 @@
           </p>
           <p class="error-message" data-testid="error-text" hidden></p>
 
+          <label class="console-slot-picker"><span>循环执行槽位</span><select data-testid="console-slot-select" aria-label="选择要循环执行的宏槽位"><option value="0">01 · 素材远征</option></select></label>
+
           <div class="controls">
             <button
               class="button button-secondary"
@@ -139,6 +143,10 @@
         </section>
       </section>
 
+      </div>
+
+      <div data-route-view="control" hidden>
+        <div class="subpage-heading"><p class="eyebrow">DIRECT CONTROL / 网页控制</p><h1>手动接管，<span>按键即时输出。</span></h1><p>触屏、鼠标和键盘输入直接映射到 Switch 手柄。离开本页时会自动释放按键。</p></div>
       <section
         class="manual-panel"
         aria-labelledby="manual-title"
@@ -150,8 +158,8 @@
             <p class="eyebrow">临时接管 / DIRECT INPUT</p>
             <h2 id="manual-title">需要补一刀？自己来。</h2>
             <p>
-              鼠标、触屏和键盘都支持按住与多键组合。任意手动输入会先停止板载脚本；
-              松开按键、窗口失焦或切换标签页时自动释放。
+              鼠标、触屏和键盘都支持按住与多键组合；下方两个摇杆可以直接拖动。
+              任意手动输入会先停止板载脚本；松开、窗口失焦或切换标签页时自动回中并释放。
             </p>
           </div>
           <span
@@ -400,14 +408,21 @@
             </div>
           </div>
         </div>
+        <div class="manual-sticks" role="group" aria-label="虚拟摇杆">
+          <div class="manual-stick-group"><strong>左摇杆</strong><div class="manual-stick" data-manual-stick="left" role="slider" tabindex="0" aria-label="左摇杆" aria-valuemin="0" aria-valuemax="255" aria-valuenow="128" aria-valuetext="居中" aria-disabled="true"><span class="manual-stick-thumb" aria-hidden="true"></span></div><small>拖动圆盘控制移动</small></div>
+          <div class="manual-stick-group"><strong>右摇杆</strong><div class="manual-stick" data-manual-stick="right" role="slider" tabindex="0" aria-label="右摇杆" aria-valuemin="0" aria-valuemax="255" aria-valuenow="128" aria-valuetext="居中" aria-disabled="true"><span class="manual-stick-thumb" aria-hidden="true"></span></div><small>拖动圆盘控制视角</small></div>
+        </div>
       </section>
 
+      </div>
+
+      <div data-route-view="record" hidden>
       <section class="xbox-section" data-testid="xbox-panel" hidden aria-labelledby="xbox-title">
         <div class="xbox-heading">
           <div>
             <p class="eyebrow">GAMEPAD BRIDGE / 电脑端</p>
             <h2 id="xbox-title">Xbox 输入，映射成 Switch 手柄。</h2>
-            <p>手柄先连接 Windows。网页读取手柄后，经 USB-UART 把操作送到 ESP32；录制时同一份操作会生成槽位 01 的草稿。</p>
+            <p>手柄先连接 Windows。网页读取手柄后，经 USB-UART 把操作送到 ESP32；结束录制后可命名并选择保存槽位。</p>
           </div>
           <label class="xbox-device-label"><span>当前手柄</span><select data-testid="xbox-device" aria-label="选择 Xbox 手柄"></select></label>
         </div>
@@ -486,9 +501,14 @@
           </div>
           <label class="xbox-record-setting"><span>画圈录制采样</span><select data-testid="xbox-record-interval"><option value="220" selected>标准 · 220 ms</option><option value="350">省步骤 · 350 ms</option><option value="80">精细 · 80 ms</option></select></label>
           <p class="xbox-record-info" data-testid="xbox-record-info" hidden></p>
-          <p class="xbox-save-note">持续推住同一方向会合并成一个动作；画圈按所选间隔采样轨迹。录制停止后会打开槽位 01 草稿，检查后再保存到 Flash；最多 128 步。</p>
+          <p class="xbox-save-note">持续推住同一方向会合并成一个动作；画圈按所选间隔采样轨迹。录制停止后预览草稿，取名并选择槽位保存；最多 128 步。</p>
         </div>
       </section>
+      <section class="macro-page" data-testid="xbox-unavailable" hidden><div class="macro-page-head"><p class="eyebrow">GAMEPAD BRIDGE / 宏录制</p><h1>请用电脑浏览器<span>连接 Xbox 手柄。</span></h1><p>Xbox 输入映射与录制需要桌面版 Chrome 或 Edge 的 Gamepad API，以及连接到电脑的 USB-UART。手机可浏览宏、图片并控制板载宏。</p></div></section>
+
+      </div>
+
+      <div data-route-view="home">
 
       <section class="wiring" aria-labelledby="wiring-title">
         <div class="wiring-copy">
@@ -519,27 +539,17 @@
       <section class="macro-page" data-route-view="macros" hidden aria-labelledby="macros-title">
         <div class="macro-page-head">
           <p class="eyebrow">BOARD MACRO / 板载宏</p>
-          <h1 id="macros-title">一格宏位，<span>整轮都在板上跑。</span></h1>
-          <p>查看素材远征的每一步。修改动作、保持时间、循环间隔和运行灯色后，可保存到板载 Flash；断开网页也能继续执行。</p>
+          <h1 id="macros-title">十二格宏位，<span>整轮都在板上跑。</span></h1>
+          <p>从录制或 JSON 创建宏，命名后保存到槽位。每格可保存配装图片；断开网页后，宏与图片仍在板载 Flash。</p>
         </div>
         <p class="macro-message" data-testid="macro-list-message" role="status">连接设备后读取宏槽位。</p>
-        <article class="macro-slot-card">
-          <div class="macro-slot-id"><small>SLOT</small><strong>01</strong></div>
-          <div class="macro-slot-main">
-            <p class="eyebrow">MATERIAL RAID / 素材远征</p>
-            <h2>素材远征 · 自动循环</h2>
-            <span data-testid="macro-source">内置宏</span>
-          </div>
-          <div class="macro-slot-facts">
-            <div><small>动作</small><strong data-testid="macro-list-steps">48</strong></div>
-            <div><small>单轮</small><strong data-testid="macro-list-duration">01:03.595</strong></div>
-            <div><small>灯色</small><strong><i class="macro-color-dot" data-testid="macro-list-color"></i><span data-testid="macro-list-color-name">紫色</span></strong></div>
-          </div>
-          <a class="button button-primary macro-enter" href="#/macros/1">进入编辑 →</a>
-        </article>
+        <div class="macro-storage"><div><strong>宏与配装图存储空间</strong><span data-testid="macro-storage-label">连接设备后读取</span></div><progress data-testid="macro-storage-progress" max="100" value="0" aria-label="宏存储占用率"></progress></div>
+        <div class="macro-import-bar"><label><span>导入到槽位</span><select data-testid="macro-import-slot" aria-label="选择 JSON 导入目标槽位"></select></label><button class="button button-secondary" type="button" data-testid="macro-import-json">导入 JSON</button><input type="file" accept="application/json,.json" data-testid="macro-import-file" hidden></div>
+        <div class="macro-slot-grid" data-testid="macro-slot-list"></div>
+        <input type="file" accept="image/*" data-testid="macro-list-image-file" hidden>
         <div class="macro-tip">
           <strong>Flash 覆盖规则</strong>
-          <p>保存后优先运行 Flash 版本；恢复内置宏只移除这一格的自定义覆盖。存储挂载失败时仍可运行内置宏。</p>
+          <p>第 01 槽默认使用固件内置宏；保存后优先运行 Flash 版本。其余槽位由用户创建。图片上传会压缩为 JPEG，单张最多 64 KiB，并计入槽位占用。</p>
         </div>
         <button class="button button-secondary" type="button" data-testid="macro-format-button" hidden>初始化宏存储</button>
       </section>
@@ -547,7 +557,7 @@
       <section class="macro-page" data-route-view="macro-edit" hidden aria-labelledby="macro-edit-title">
         <div class="macro-page-head">
           <a class="macro-back" href="#/macros">← 返回宏列表</a>
-          <p class="eyebrow">SLOT 01 / STEP EDITOR</p>
+          <p class="eyebrow" data-testid="macro-edit-slot-label">SLOT 01 / STEP EDITOR</p>
           <h1 id="macro-edit-title">微调每一步，<span>保存整轮节奏。</span></h1>
           <p>按键、方向、摇杆和保持时间都能修改。中立等待也是一个动作；保存前可以上移、复制或插入动作。</p>
         </div>
@@ -555,6 +565,8 @@
         <div class="macro-editor-card">
           <fieldset class="macro-editor-fields" data-testid="macro-edit-fields">
           <div class="macro-editor-meta">
+            <label><span>宏名称</span><input type="text" maxlength="48" data-testid="macro-name" placeholder="给这段宏取名"></label>
+            <label><span>保存到槽位</span><select data-testid="macro-target-slot" aria-label="选择保存槽位"></select></label>
             <label><span>整轮结束后等待</span><div class="input-unit"><input type="number" min="0" max="600000" step="10" data-testid="macro-loop-gap"><small>ms</small></div></label>
             <div class="macro-editor-summary"><span>当前草稿</span><strong data-testid="macro-edit-summary">48 个动作</strong></div>
           </div>
@@ -566,14 +578,18 @@
           <div class="macro-steps-head"><h2>动作列表</h2><span>点击动作展开微调</span></div>
           <div class="macro-step-list" data-testid="macro-step-list"></div>
           </fieldset>
+          <div class="macro-image-editor"><div><strong>配装图片</strong><p>可以上传配装截图并保存到此槽位；导出 JSON 时会一并包含图片。</p></div><img data-testid="macro-edit-image" alt="当前槽位的配装图片" hidden><div class="macro-image-actions"><button class="button button-secondary" type="button" data-testid="macro-edit-image-view">查看图片</button><button class="button button-secondary" type="button" data-testid="macro-edit-image-upload">选择图片</button><button class="button button-stop" type="button" data-testid="macro-edit-image-remove">删除图片</button></div><input type="file" accept="image/*" data-testid="macro-edit-image-file" hidden></div>
           <div class="macro-editor-actions">
             <button class="button button-secondary" type="button" data-testid="macro-discard-recording" hidden>放弃录制草稿</button>
             <button class="button button-secondary" type="button" data-testid="macro-add-step">＋ 添加动作</button>
             <button class="button button-stop" type="button" data-testid="macro-restore">恢复内置</button>
-            <button class="button button-primary" type="button" data-testid="macro-save">保存到 Flash</button>
+            <button class="button button-secondary" type="button" data-testid="macro-export-json">导出 JSON</button>
+            <button class="button button-primary" type="button" data-testid="macro-save">保存到槽位</button>
           </div>
         </div>
       </section>
+
+      <div class="macro-image-modal" data-testid="macro-image-modal" hidden><div class="macro-image-modal-card"><div><strong data-testid="macro-image-modal-title">配装图片</strong><button type="button" data-testid="macro-image-modal-close" aria-label="关闭图片预览">×</button></div><img data-testid="macro-image-modal-image" alt="槽位配装图片"></div></div>
 
       <footer>
         <span>SPLATOON FARMERS · UNOFFICIAL FAN PROJECT</span>

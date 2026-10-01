@@ -75,7 +75,7 @@ export function dpadValue(activeControls) {
   return values.get(`${horizontal},${vertical}`) ?? 15;
 }
 
-export function buildManualReport(activeControls) {
+export function buildManualReport(activeControls, axes = {}) {
   const active = new Set(activeControls);
   let buttons = 0;
   for (const [control, bit] of Object.entries(BUTTON_BITS)) {
@@ -87,10 +87,10 @@ export function buildManualReport(activeControls) {
   const report = {
     buttons,
     dpad: dpadValue(active),
-    leftX: 128,
-    leftY: 128,
-    rightX: 128,
-    rightY: 128,
+    leftX: axes.leftX ?? 128,
+    leftY: axes.leftY ?? 128,
+    rightX: axes.rightX ?? 128,
+    rightY: axes.rightY ?? 128,
   };
   return {
     ...report,

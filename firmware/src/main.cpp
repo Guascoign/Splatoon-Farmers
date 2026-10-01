@@ -29,7 +29,7 @@
 namespace {
 
 constexpr uint32_t kControlBaudRate = 115200;
-constexpr char kFirmwareVersion[] = "SplatoonFarmers/1.3.0";
+constexpr char kFirmwareVersion[] = "SplatoonFarmers/1.4.0";
 constexpr uint32_t kGamepadStreamTimeoutMs = 800;
 constexpr char kWifiApSsid[] = "ESP32-S3-Switch";
 const IPAddress kWifiApAddress(192, 168, 9, 1);
@@ -48,6 +48,9 @@ farmers::StatusLed Led;
 farmers::MacroSlotStorage SlotStorage;
 farmers::SlotMacro SavedSlot{};
 farmers::SlotMacro UploadSlot{};
+farmers::SlotMacro ReadSlot{};
+uint8_t ActiveSlot = 0;
+uint8_t UploadTargetSlot = 0;
 bool SlotOverridden = false;
 bool UploadActive = false;
 bool UploadStepReceived[farmers::kMaxSlotSteps] = {};
@@ -55,7 +58,7 @@ farmers::MacroEngine Macro(
     farmers::kMaterialFarmMacro, farmers::kMaterialFarmStepCount,
     farmers::kMaterialFarmLoopGapMs, true);
 
-char LineBuffer[128];
+char LineBuffer[256];
 size_t LineLength = 0;
 bool LineOverflow = false;
 
@@ -115,27 +118,70 @@ const char* phaseName(farmers::MacroPhase phase) {
 }
 
 size_t activeStepCount() {
-  return SlotOverridden ? SavedSlot.stepCount : farmers::kMaterialFarmStepCount;
+  return SlotOverridden ? SavedSlot.stepCount :
+         ActiveSlot == 0 ? farmers::kMaterialFarmStepCount : 0;
 }
 
 uint32_t activeDurationMs() {
-  return SlotOverridden ? farmers::slotMacroDurationMs(SavedSlot)
-                        : farmers::kMaterialFarmDurationMs;
+  return SlotOverridden ? farmers::slotMacroDurationMs(SavedSlot) :
+         ActiveSlot == 0 ? farmers::kMaterialFarmDurationMs : 0;
 }
 
 uint32_t activeLoopGapMs() {
-  return SlotOverridden ? SavedSlot.loopGapMs
-                        : farmers::kMaterialFarmLoopGapMs;
+  return SlotOverridden ? SavedSlot.loopGapMs :
+         ActiveSlot == 0 ? farmers::kMaterialFarmLoopGapMs : 0;
 }
 
 uint8_t activeColor() { return SlotOverridden ? SavedSlot.color : 0; }
 
 void useBuiltinMacro() {
   GamepadStreamActive = false;
+  ActiveSlot = 0;
   SlotOverridden = false;
   Macro.configure(farmers::kMaterialFarmMacro,
                   farmers::kMaterialFarmStepCount,
                   farmers::kMaterialFarmLoopGapMs, true);
+}
+
+bool selectMacroSlot(uint8_t slot) {
+  if (slot >= farmers::kMacroSlotCount) return false;
+  if (SlotStorage.load(slot, &SavedSlot)) {
+    ActiveSlot = slot;
+    SlotOverridden = true;
+    Macro.configure(SavedSlot.steps, SavedSlot.stepCount,
+                    SavedSlot.loopGapMs, true);
+    return true;
+  }
+  if (slot == 0) {
+    useBuiltinMacro();
+    return true;
+  }
+  return false;
+}
+
+String jsonName(const char* name) {
+  String escaped;
+  for (const char* cursor = name; *cursor != '\0'; ++cursor) {
+    if (*cursor == '"' || *cursor == '\\') escaped += '\\';
+    escaped += *cursor;
+  }
+  return escaped;
+}
+
+void defaultUploadName(uint8_t slot) {
+  if (slot == 0) {
+    memcpy(UploadSlot.name, "素材远征", sizeof("素材远征"));
+  } else {
+    snprintf(UploadSlot.name, sizeof(UploadSlot.name), "宏槽位 %02u",
+             static_cast<unsigned>(slot + 1));
+  }
+}
+
+int hexNibble(char value) {
+  if (value >= '0' && value <= '9') return value - '0';
+  if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+  if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+  return -1;
 }
 
 String stateResponse(const char* type) {
@@ -148,7 +194,7 @@ String stateResponse(const char* type) {
       "\"phase\":\"%s\",\"step\":%u,\"steps\":%u,\"cycle\":%lu,"
       "\"duration_ms\":%lu,\"loop_gap_ms\":%lu,\"cycle_ms\":%lu,"
       "\"wifi\":%s,\"wifi_ssid\":\"%s\",\"wifi_ip\":\"192.168.9.1\","
-      "\"slot\":0,\"source\":\"%s\",\"color\":%u,\"macro_storage\":\"%s\"}",
+      "\"slot\":%u,\"source\":\"%s\",\"color\":%u,\"macro_storage\":\"%s\"}",
       type, kFirmwareVersion, Macro.running() ? "running" : "idle",
       phaseName(Macro.phase()), static_cast<unsigned int>(visibleStep),
       static_cast<unsigned int>(activeStepCount()),
@@ -157,43 +203,77 @@ String stateResponse(const char* type) {
       static_cast<unsigned long>(activeLoopGapMs()),
       static_cast<unsigned long>(activeDurationMs() + activeLoopGapMs()),
       WifiConsoleActive ? "true" : "false", kWifiApSsid,
-      SlotOverridden ? "flash" : "builtin", static_cast<unsigned>(activeColor()),
+      static_cast<unsigned>(ActiveSlot),
+      SlotOverridden ? "flash" : ActiveSlot == 0 ? "builtin" : "empty",
+      static_cast<unsigned>(activeColor()),
       SlotStorage.ready() ? "ready" : "mount-failed");
   return String(response);
 }
 
 String macroListResponse() {
   String response;
-  response.reserve(300);
+  response.reserve(3200);
   response += "{\"type\":\"macro_list\",\"ok\":true,\"storage\":\"";
   response += SlotStorage.ready() ? "ready" : "mount-failed";
-  response += "\",\"slots\":[{\"slot\":0,\"name\":\"素材远征\",\"source\":\"";
-  response += SlotOverridden ? "flash" : "builtin";
-  response += "\",\"steps\":";
-  response += activeStepCount();
-  response += ",\"duration_ms\":";
-  response += activeDurationMs();
-  response += ",\"loop_gap_ms\":";
-  response += activeLoopGapMs();
-  response += ",\"color\":";
-  response += activeColor();
-  response += "}]}";
+  response += "\",\"used_bytes\":";
+  response += static_cast<unsigned long>(SlotStorage.usedBytes());
+  response += ",\"total_bytes\":";
+  response += static_cast<unsigned long>(SlotStorage.totalBytes());
+  response += ",\"slots\":[";
+  for (uint8_t slot = 0; slot < farmers::kMacroSlotCount; ++slot) {
+    const bool flash = SlotStorage.load(slot, &ReadSlot);
+    if (slot > 0) response += ',';
+    response += "{\"slot\":";
+    response += slot;
+    response += ",\"name\":\"";
+    response += jsonName(flash ? ReadSlot.name : slot == 0 ? "素材远征" : "");
+    response += "\",\"source\":\"";
+    response += flash ? "flash" : slot == 0 ? "builtin" : "empty";
+    response += "\",\"steps\":";
+    response += flash ? ReadSlot.stepCount :
+        slot == 0 ? farmers::kMaterialFarmStepCount : 0;
+    response += ",\"duration_ms\":";
+    response += flash ? farmers::slotMacroDurationMs(ReadSlot) :
+        slot == 0 ? farmers::kMaterialFarmDurationMs : 0;
+    response += ",\"loop_gap_ms\":";
+    response += flash ? ReadSlot.loopGapMs :
+        slot == 0 ? farmers::kMaterialFarmLoopGapMs : 0;
+    response += ",\"color\":";
+    response += flash ? ReadSlot.color : 0;
+    response += ",\"used_bytes\":";
+    response += static_cast<unsigned long>(SlotStorage.slotUsedBytes(slot));
+    response += ",\"image_bytes\":";
+    response += static_cast<unsigned long>(SlotStorage.slotImageUsedBytes(slot));
+    uint32_t imageSize = 0;
+    SlotStorage.imageInfo(slot, &imageSize);
+    response += ",\"image_size\":";
+    response += static_cast<unsigned long>(imageSize);
+    response += '}';
+  }
+  response += "]}";
   return response;
 }
 
-String macroDetailResponse() {
-  const farmers::MacroStep* steps = SlotOverridden
-      ? SavedSlot.steps : farmers::kMaterialFarmMacro;
+String macroDetailResponse(uint8_t slot) {
+  const bool flash = SlotStorage.load(slot, &ReadSlot);
+  if (!flash && slot != 0) return "ERR macro-empty";
+  const farmers::MacroStep* steps = flash
+      ? ReadSlot.steps : farmers::kMaterialFarmMacro;
+  const size_t count = flash ? ReadSlot.stepCount : farmers::kMaterialFarmStepCount;
   String response;
-  response.reserve(180 + activeStepCount() * 48);
-  response += "{\"type\":\"macro\",\"ok\":true,\"slot\":0,\"source\":\"";
-  response += SlotOverridden ? "flash" : "builtin";
+  response.reserve(210 + count * 48);
+  response += "{\"type\":\"macro\",\"ok\":true,\"slot\":";
+  response += slot;
+  response += ",\"name\":\"";
+  response += jsonName(flash ? ReadSlot.name : "素材远征");
+  response += "\",\"source\":\"";
+  response += flash ? "flash" : "builtin";
   response += "\",\"loop_gap_ms\":";
-  response += activeLoopGapMs();
+  response += flash ? ReadSlot.loopGapMs : farmers::kMaterialFarmLoopGapMs;
   response += ",\"color\":";
-  response += activeColor();
+  response += flash ? ReadSlot.color : 0;
   response += ",\"steps\":[";
-  for (size_t index = 0; index < activeStepCount(); ++index) {
+  for (size_t index = 0; index < count; ++index) {
     const farmers::MacroStep& step = steps[index];
     if (index > 0) response += ',';
     char entry[96];
@@ -230,18 +310,89 @@ String handleLine(char* line) {
   if (strcmp(line, "MACRO_LIST") == 0) {
     return macroListResponse();
   }
-  if (strcmp(line, "MACRO_GET") == 0) {
-    return macroDetailResponse();
+  unsigned long selectedSlot = 0;
+  char trailing = '\0';
+  unsigned long imageOffset = 0;
+  if (sscanf(line, "SLOT_IMAGE_INFO %lu %c", &selectedSlot,
+             &trailing) == 1) {
+    if (selectedSlot >= farmers::kMacroSlotCount) return "ERR invalid-slot";
+    uint32_t bytes = 0;
+    const bool exists = SlotStorage.imageInfo(selectedSlot, &bytes);
+    char response[120];
+    snprintf(response, sizeof(response),
+             "{\"type\":\"slot_image_info\",\"ok\":true,\"slot\":%lu,\"exists\":%s,\"bytes\":%lu}",
+             selectedSlot, exists ? "true" : "false",
+             static_cast<unsigned long>(bytes));
+    return String(response);
+  }
+  if (sscanf(line, "SLOT_IMAGE_READ %lu %lu %c", &selectedSlot,
+             &imageOffset, &trailing) == 2) {
+    if (selectedSlot >= farmers::kMacroSlotCount) return "ERR invalid-slot";
+    char hex[161] = {};
+    size_t bytesRead = 0;
+    if (!SlotStorage.readImageChunk(selectedSlot, imageOffset, hex,
+                                    sizeof(hex), &bytesRead))
+      return "ERR image-read-failed";
+    String response;
+    response.reserve(250);
+    response += "{\"type\":\"slot_image_chunk\",\"ok\":true,\"offset\":";
+    response += imageOffset;
+    response += ",\"data\":\"";
+    response += hex;
+    response += "\"}";
+    return response;
+  }
+  if (strncmp(line, "SLOT_IMAGE_BEGIN ", 17) == 0) {
+    unsigned long bytes = 0, checksum = 0;
+    if (Macro.running()) return "ERR macro-running";
+    if (sscanf(line, "SLOT_IMAGE_BEGIN %lu %lu %lu %c", &selectedSlot,
+               &bytes, &checksum, &trailing) != 3 ||
+        selectedSlot >= farmers::kMacroSlotCount || bytes == 0 ||
+        bytes > farmers::kMaxSlotImageBytes || checksum > 0xffffffffUL)
+      return "ERR invalid-image-begin";
+    if (!SlotStorage.beginImage(selectedSlot, bytes, checksum))
+      return "ERR image-upload-failed";
+    return "OK";
+  }
+  if (strncmp(line, "SLOT_IMAGE_CHUNK ", 17) == 0) {
+    return SlotStorage.appendImageHex(line + 17) ? "OK" : "ERR invalid-image-chunk";
+  }
+  if (strcmp(line, "SLOT_IMAGE_COMMIT") == 0) {
+    return SlotStorage.commitImage() ? "OK" : "ERR image-commit-failed";
+  }
+  if (strcmp(line, "SLOT_IMAGE_ABORT") == 0) {
+    SlotStorage.abortImage();
+    return "OK";
+  }
+  if (sscanf(line, "SLOT_IMAGE_DELETE %lu %c", &selectedSlot,
+             &trailing) == 1) {
+    if (Macro.running()) return "ERR macro-running";
+    if (selectedSlot >= farmers::kMacroSlotCount) return "ERR invalid-slot";
+    return SlotStorage.removeImage(selectedSlot) ? "OK" : "ERR image-delete-failed";
+  }
+  if (sscanf(line, "MACRO_GET %lu %c", &selectedSlot, &trailing) == 1 ||
+      strcmp(line, "MACRO_GET") == 0) {
+    if (selectedSlot >= farmers::kMacroSlotCount) return "ERR invalid-slot";
+    return macroDetailResponse(static_cast<uint8_t>(selectedSlot));
   }
   if (strcmp(line, "MACRO_ABORT") == 0) {
     UploadActive = false;
     return "OK";
   }
-  if (strcmp(line, "MACRO_RESTORE") == 0) {
+  if (sscanf(line, "MACRO_RESTORE %lu %c", &selectedSlot, &trailing) == 1 ||
+      strcmp(line, "MACRO_RESTORE") == 0) {
     if (Macro.running()) return "ERR macro-running";
     if (!SlotStorage.ready()) return "ERR storage-unavailable";
-    if (!SlotStorage.restore()) return "ERR restore-failed";
-    useBuiltinMacro();
+    if (selectedSlot >= farmers::kMacroSlotCount) return "ERR invalid-slot";
+    if (!SlotStorage.restore(static_cast<uint8_t>(selectedSlot)))
+      return "ERR restore-failed";
+    if (ActiveSlot == selectedSlot) {
+      if (selectedSlot == 0) useBuiltinMacro();
+      else {
+        SlotOverridden = false;
+        Macro.configure(nullptr, 0, 0, true);
+      }
+    }
     flushMacroReport();
     return "OK";
   }
@@ -254,12 +405,12 @@ String handleLine(char* line) {
     return "OK";
   }
   unsigned long count = 0, gap = 0, color = 0;
-  char trailing = '\0';
   if (strncmp(line, "MACRO_BEGIN ", 12) == 0) {
     if (Macro.running()) return "ERR macro-running";
     if (!SlotStorage.ready()) return "ERR storage-unavailable";
-    if (sscanf(line, "MACRO_BEGIN %lu %lu %lu %c", &count, &gap, &color,
-               &trailing) != 3 ||
+    if (sscanf(line, "MACRO_BEGIN %lu %lu %lu %lu %c", &selectedSlot,
+               &count, &gap, &color, &trailing) != 4 ||
+        selectedSlot >= farmers::kMacroSlotCount ||
         count == 0 || count > farmers::kMaxSlotSteps ||
         gap > farmers::kMaxSlotLoopGapMs || color >= farmers::kSlotColorCount) {
       return "ERR invalid-macro-begin";
@@ -268,8 +419,27 @@ String handleLine(char* line) {
     UploadSlot.stepCount = static_cast<uint16_t>(count);
     UploadSlot.loopGapMs = gap;
     UploadSlot.color = static_cast<uint8_t>(color);
+    UploadTargetSlot = static_cast<uint8_t>(selectedSlot);
+    defaultUploadName(UploadTargetSlot);
     memset(UploadStepReceived, 0, sizeof(UploadStepReceived));
     UploadActive = true;
+    return "OK";
+  }
+  if (strncmp(line, "MACRO_NAME ", 11) == 0) {
+    if (!UploadActive) return "ERR invalid-macro-name";
+    const char* hex = line + 11;
+    const size_t length = strlen(hex);
+    if (length == 0 || length > farmers::kMaxSlotNameBytes * 2 ||
+        length % 2 != 0) return "ERR invalid-macro-name";
+    memset(UploadSlot.name, 0, sizeof(UploadSlot.name));
+    for (size_t index = 0; index < length / 2; ++index) {
+      const int high = hexNibble(hex[index * 2]);
+      const int low = hexNibble(hex[index * 2 + 1]);
+      if (high < 0 || low < 0) return "ERR invalid-macro-name";
+      const uint8_t byte = static_cast<uint8_t>((high << 4) | low);
+      if (byte < 0x20 || byte == 0x7f) return "ERR invalid-macro-name";
+      UploadSlot.name[index] = static_cast<char>(byte);
+    }
     return "OK";
   }
   if (strncmp(line, "MACRO_STEP ", 11) == 0) {
@@ -309,18 +479,26 @@ String handleLine(char* line) {
       return "ERR macro-checksum";
     }
     UploadActive = false;
-    if (!SlotStorage.save(UploadSlot)) return "ERR macro-save-failed";
+    if (!SlotStorage.save(UploadTargetSlot, UploadSlot))
+      return "ERR macro-save-failed";
     GamepadStreamActive = false;
-    SavedSlot = UploadSlot;
-    SlotOverridden = true;
-    Macro.configure(SavedSlot.steps, SavedSlot.stepCount,
-                    SavedSlot.loopGapMs, true);
-    flushMacroReport();
+    if (ActiveSlot == UploadTargetSlot) {
+      SavedSlot = UploadSlot;
+      SlotOverridden = true;
+      Macro.configure(SavedSlot.steps, SavedSlot.stepCount,
+                      SavedSlot.loopGapMs, true);
+      flushMacroReport();
+    }
     return "OK";
   }
-  if (strcmp(line, "START") == 0) {
+  if (sscanf(line, "START %lu %c", &selectedSlot, &trailing) == 1 ||
+      strcmp(line, "START") == 0) {
     UploadActive = false;
+    SlotStorage.abortImage();
     GamepadStreamActive = false;
+    if (selectedSlot >= farmers::kMacroSlotCount ||
+        !selectMacroSlot(static_cast<uint8_t>(selectedSlot)))
+      return "ERR macro-empty";
     Macro.start(millis());
     flushMacroReport();
     return stateResponse("status");

@@ -351,7 +351,7 @@ export class XboxPanel {
   startRecording() {
     if (!this.active || this.recorder.active) return;
     this.recorder.start(this.lastReport, performance.now(), this.recordInterval.value);
-    this.status.textContent = "正在录制 · 操作会进入槽位 01 草稿";
+    this.status.textContent = "正在录制 · 结束后可命名并保存到槽位";
     this.render();
   }
 
