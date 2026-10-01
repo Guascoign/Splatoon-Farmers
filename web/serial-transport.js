@@ -1,5 +1,54 @@
 import { DEVICE_BAUD_RATE } from "./protocol.js";
 
+// The page served by the ESP32 uses the same commands as the USB-UART link.
+// HTTP works in mobile browsers, where Web Serial is generally unavailable.
+export class HttpTransport {
+  constructor({ onLine }) {
+    this.onLine = onLine;
+    this.connected = false;
+    this.writeChain = Promise.resolve();
+    this.abortController = null;
+  }
+
+  static isSupported() {
+    return typeof fetch === "function";
+  }
+
+  async connect() {
+    this.abortController = new AbortController();
+    this.connected = true;
+  }
+
+  send(command) {
+    const write = async () => {
+      if (!this.connected) {
+        throw new Error("设备网页尚未连接");
+      }
+      const response = await fetch(`/api/command?command=${encodeURIComponent(command)}`, {
+        method: "POST",
+        cache: "no-store",
+        signal: this.abortController.signal,
+      });
+      const line = (await response.text()).trim();
+      if (!response.ok || line.startsWith("ERR")) {
+        throw new Error(line || `设备返回 HTTP ${response.status}`);
+      }
+      if (line) {
+        this.onLine(line);
+      }
+    };
+    const result = this.writeChain.then(write, write);
+    this.writeChain = result.catch(() => {});
+    return result;
+  }
+
+  async disconnect() {
+    this.connected = false;
+    this.abortController?.abort();
+    this.abortController = null;
+  }
+}
+
 export class SerialTransport {
   constructor({ onLine, onDisconnect }) {
     this.onLine = onLine;

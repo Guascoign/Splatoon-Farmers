@@ -1,9 +1,12 @@
 #include <Arduino.h>
+#include <WebServer.h>
+#include <WiFi.h>
 
 #include <stdio.h>
 #include <string.h>
 
 #include "ControllerReport.h"
+#include "EmbeddedWebAssets.h"
 #include "MaterialFarmMacro.h"
 #include "MacroEngine.h"
 #include "switch_ESP32.h"
@@ -12,6 +15,7 @@
  * Hardware topology:
  *   ESP32-S3 native USB (GPIO19 D-, GPIO20 D+) -> Nintendo Switch dock
  *   ESP32-S3 UART0 through the board's USB-UART bridge -> browser/PC
+ *   ESP32-S3 Wi-Fi AP -> phone browser at http://192.168.9.1
  *
  * This deliberately uses a UART-backed serial port. The native USB peripheral
  * is reserved for switch_ESP32's Nintendo Switch HID device.
@@ -23,7 +27,13 @@
 namespace {
 
 constexpr uint32_t kControlBaudRate = 115200;
-constexpr char kFirmwareVersion[] = "SplatoonFarmers/1.0.0";
+constexpr char kFirmwareVersion[] = "SplatoonFarmers/1.1.0";
+constexpr char kWifiApSsid[] = "ESP32-S3-Switch";
+const IPAddress kWifiApAddress(192, 168, 9, 1);
+const IPAddress kWifiApSubnet(255, 255, 255, 0);
+
+WebServer WebConsole(80);
+bool WifiConsoleActive = false;
 
 NSGamepad Gamepad;
 farmers::MacroEngine Macro(
@@ -81,21 +91,25 @@ const char* phaseName(farmers::MacroPhase phase) {
   }
 }
 
-void emitState(const char* type) {
+String stateResponse(const char* type) {
   const size_t visibleStep =
       Macro.phase() == farmers::MacroPhase::kSteps ? Macro.stepIndex() + 1 : 0;
-  ATT_CONTROL_SERIAL.printf(
+  char response[384];
+  snprintf(response, sizeof(response),
       "{\"type\":\"%s\",\"ok\":true,\"firmware\":\"%s\","
       "\"routine\":\"material-farm\",\"embedded\":true,\"state\":\"%s\","
       "\"phase\":\"%s\",\"step\":%u,\"steps\":%u,\"cycle\":%lu,"
-      "\"duration_ms\":%lu,\"loop_gap_ms\":%lu,\"cycle_ms\":%lu}\n",
+      "\"duration_ms\":%lu,\"loop_gap_ms\":%lu,\"cycle_ms\":%lu,"
+      "\"wifi\":%s,\"wifi_ssid\":\"%s\",\"wifi_ip\":\"192.168.9.1\"}",
       type, kFirmwareVersion, Macro.running() ? "running" : "idle",
       phaseName(Macro.phase()), static_cast<unsigned int>(visibleStep),
       static_cast<unsigned int>(farmers::kMaterialFarmStepCount),
       static_cast<unsigned long>(Macro.cycleCount()),
       static_cast<unsigned long>(farmers::kMaterialFarmDurationMs),
       static_cast<unsigned long>(farmers::kMaterialFarmLoopGapMs),
-      static_cast<unsigned long>(farmers::kMaterialFarmCycleMs));
+      static_cast<unsigned long>(farmers::kMaterialFarmCycleMs),
+      WifiConsoleActive ? "true" : "false", kWifiApSsid);
+  return String(response);
 }
 
 void flushMacroReport() {
@@ -104,30 +118,25 @@ void flushMacroReport() {
   }
 }
 
-void handleLine(char* line) {
+String handleLine(char* line) {
   if (strcmp(line, "PING") == 0) {
-    ATT_CONTROL_SERIAL.println("PONG");
-    return;
+    return "PONG";
   }
   if (strcmp(line, "HELLO") == 0 || strcmp(line, "INFO") == 0) {
-    emitState("info");
-    return;
+    return stateResponse("info");
   }
   if (strcmp(line, "STATUS") == 0) {
-    emitState("status");
-    return;
+    return stateResponse("status");
   }
   if (strcmp(line, "START") == 0) {
     Macro.start(millis());
     flushMacroReport();
-    emitState("status");
-    return;
+    return stateResponse("status");
   }
   if (strcmp(line, "STOP") == 0) {
     Macro.stop();
     flushMacroReport();
-    emitState("status");
-    return;
+    return stateResponse("status");
   }
 
   char command[8] = {0};
@@ -148,11 +157,62 @@ void handleLine(char* line) {
     Macro.stop();
     Macro.consumeReportChanged();
     applyRawReport(buttons, dpad, leftX, leftY, rightX, rightY);
-    ATT_CONTROL_SERIAL.println("OK");
-    return;
+    return "OK";
   }
 
-  ATT_CONTROL_SERIAL.println("ERR");
+  return "ERR";
+}
+
+const EmbeddedWebAsset* embeddedWebAssetForPath(const String& path) {
+  for (size_t index = 0; index < kEmbeddedWebAssetCount; ++index) {
+    if (path == kEmbeddedWebAssets[index].path) {
+      return &kEmbeddedWebAssets[index];
+    }
+  }
+  return nullptr;
+}
+
+void serveEmbeddedWebAsset() {
+  const String path = WebConsole.uri() == "/" ? "/index.html" : WebConsole.uri();
+  const EmbeddedWebAsset* asset = embeddedWebAssetForPath(path);
+  if (asset == nullptr) {
+    WebConsole.send(404, "text/plain; charset=utf-8", "Not found");
+    return;
+  }
+  WebConsole.sendHeader("Content-Encoding", "gzip");
+  WebConsole.sendHeader("Vary", "Accept-Encoding");
+  WebConsole.sendHeader("Cache-Control", "no-cache");
+  WebConsole.send_P(200, asset->contentType,
+                    reinterpret_cast<PGM_P>(asset->data), asset->size);
+}
+
+void handleWebCommand() {
+  const String command = WebConsole.arg("command");
+  if (command.isEmpty() || command.length() >= sizeof(LineBuffer) ||
+      command.indexOf('\r') >= 0 || command.indexOf('\n') >= 0) {
+    WebConsole.send(400, "text/plain; charset=utf-8", "ERR invalid-command");
+    return;
+  }
+  char line[sizeof(LineBuffer)] = {};
+  command.toCharArray(line, sizeof(line));
+  const String response = handleLine(line);
+  WebConsole.sendHeader("Cache-Control", "no-store");
+  WebConsole.send(200, response.startsWith("{") ? "application/json" :
+                        "text/plain; charset=utf-8", response);
+}
+
+void startWifiConsole() {
+  WiFi.mode(WIFI_AP);
+  if (!WiFi.softAPConfig(kWifiApAddress, kWifiApAddress, kWifiApSubnet) ||
+      !WiFi.softAP(kWifiApSsid)) {
+    ATT_CONTROL_SERIAL.println("ERR wifi-start-failed");
+    return;
+  }
+  WebConsole.on("/api/command", HTTP_POST, handleWebCommand);
+  WebConsole.onNotFound(serveEmbeddedWebAsset);
+  WebConsole.begin();
+  WifiConsoleActive = true;
+  ATT_CONTROL_SERIAL.println("WIFI http://192.168.9.1");
 }
 
 void readControlSerial() {
@@ -163,7 +223,7 @@ void readControlSerial() {
         ATT_CONTROL_SERIAL.println("ERR");
       } else if (LineLength > 0) {
         LineBuffer[LineLength] = '\0';
-        handleLine(LineBuffer);
+        ATT_CONTROL_SERIAL.println(handleLine(LineBuffer));
       }
       LineLength = 0;
       LineOverflow = false;
@@ -188,6 +248,7 @@ void setup() {
   Gamepad.begin();
   USB.begin();
   applyReport(farmers::kNeutralReport);
+  startWifiConsole();
 }
 
 void loop() {
@@ -195,4 +256,7 @@ void loop() {
   Macro.tick(millis());
   flushMacroReport();
   Gamepad.loop();
+  if (WifiConsoleActive) {
+    WebConsole.handleClient();
+  }
 }

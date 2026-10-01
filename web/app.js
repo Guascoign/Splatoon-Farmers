@@ -4,7 +4,7 @@ import {
   KEYBOARD_BINDINGS,
   ManualInputState,
 } from "./manual-input.js";
-import { MockSerialTransport, SerialTransport } from "./serial-transport.js";
+import { HttpTransport, MockSerialTransport, SerialTransport } from "./serial-transport.js";
 
 const elements = {
   connectionButton: document.querySelector('[data-testid="connect-button"]'),
@@ -25,7 +25,8 @@ const manualButtons = [
 ];
 
 const mockMode = new URLSearchParams(window.location.search).get("mock") === "1";
-const TransportClass = mockMode ? MockSerialTransport : SerialTransport;
+const wifiMode = !mockMode && window.location.hostname === "192.168.9.1";
+const TransportClass = mockMode ? MockSerialTransport : wifiMode ? HttpTransport : SerialTransport;
 const transportSupported = TransportClass.isSupported();
 
 let transport = null;
@@ -49,7 +50,7 @@ function setError(message = "") {
 function render() {
   const manualActive = connected && activeManualControls.size > 0;
   const running = connected && deviceState === "running" && !manualActive;
-  elements.connectionButton.textContent = connected ? "断开串口" : "连接手柄";
+  elements.connectionButton.textContent = connected ? "断开设备" : "连接手柄";
   elements.connectionButton.disabled = busy || !transportSupported;
   elements.startButton.disabled = busy || !connected || running || manualActive;
   elements.stopButton.disabled = busy || !connected || !running;
@@ -73,7 +74,7 @@ function render() {
     elements.detailText.textContent =
       deviceState === "running"
         ? "控制线已断开；板载远征任务可能仍在独立运行"
-        : "先用 USB-UART 连接电脑";
+        : wifiMode ? "正在连接板载控制台" : "连接 ESP32-S3 热点，或用 USB-UART 连接电脑";
   } else if (manualActive) {
     elements.statusText.textContent = "手动输入";
     elements.detailText.textContent = `已按下 ${activeManualControls.size} 个控制 · 板载脚本已停止`;
@@ -98,7 +99,7 @@ function render() {
     elements.manualStatus.textContent = `${activeManualControls.size} 个输入按下`;
     elements.manualStatus.dataset.state = "active";
   } else {
-    elements.manualStatus.textContent = "键盘输入已启用";
+    elements.manualStatus.textContent = "触屏 / 键盘输入已启用";
     elements.manualStatus.dataset.state = "ready";
   }
 
@@ -161,7 +162,7 @@ function onUnexpectedDisconnect(error) {
   clearInterval(pollTimer);
   pollTimer = null;
   manualInputState.clear();
-  setError(error?.message || "串口连接意外断开");
+  setError(error?.message || "设备连接意外断开");
   render();
 }
 
@@ -183,7 +184,7 @@ async function connect() {
   } catch (error) {
     connected = false;
     transport = null;
-    setError(error?.message || "无法连接串口");
+    setError(error?.message || "无法连接设备");
   } finally {
     busy = false;
     render();
@@ -199,7 +200,7 @@ async function disconnect() {
   try {
     await transport?.disconnect();
   } catch (error) {
-    setError(error?.message || "断开串口时发生错误");
+    setError(error?.message || "断开设备时发生错误");
   } finally {
     connected = false;
     transport = null;
@@ -330,6 +331,15 @@ if (!transportSupported) {
 } else if (mockMode) {
   elements.browserNote.textContent =
     "DEMO MODE · 正在使用模拟串口，不会连接真实设备";
+} else if (wifiMode) {
+  elements.browserNote.textContent =
+    "已通过 ESP32-S3-Switch 热点访问 · 手机触屏可直接控制";
+} else {
+  elements.browserNote.textContent =
+    "手机可连接 ESP32-S3-Switch 热点并访问 http://192.168.9.1";
 }
 
 render();
+if (wifiMode) {
+  connect();
+}

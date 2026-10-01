@@ -97,7 +97,7 @@
           </div>
 
           <p class="device-detail" data-testid="detail-text">
-            先用 USB-UART 连接电脑
+            连接 ESP32-S3-Switch 热点，访问 http://192.168.9.1
           </p>
           <p class="error-message" data-testid="error-text" hidden></p>
 
@@ -128,7 +128,7 @@
           </div>
 
           <p class="browser-note" data-testid="browser-note">
-            桌面版 Chrome / Edge · 浏览器只负责发令，不参与脚本计时
+            手机连接 ESP32-S3-Switch 热点，访问 http://192.168.9.1
           </p>
         </section>
       </section>
@@ -400,7 +400,7 @@
         <div class="wiring-copy">
           <p class="eyebrow">GEAR CHECK / 双链路</p>
           <h2 id="wiring-title">两根线，各干一件事。</h2>
-          <p>原生 USB 负责扮演手柄，USB-UART 只负责接受网页指令。</p>
+          <p>原生 USB 负责扮演手柄；手机连板载 Wi-Fi 热点即可控制，电脑也可用 USB-UART。</p>
         </div>
         <ol class="wiring-list">
           <li>
@@ -413,8 +413,8 @@
           <li>
             <span>02</span>
             <div>
-              <strong>USB-UART → 电脑</strong>
-              <p>网页发送 START、STOP、状态查询和手动按键。</p>
+              <strong>Wi-Fi → 手机 / USB-UART → 电脑</strong>
+              <p>手机连接 ESP32-S3-Switch 后打开 http://192.168.9.1；电脑可继续用串口网页。</p>
             </div>
           </li>
         </ol>

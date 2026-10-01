@@ -21,8 +21,10 @@ Required gears described in this video: [Bilibili](https://www.bilibili.com/vide
 
 - Emulates a wired Nintendo Switch controller over the ESP32-S3 native USB port.
 - Keeps the complete 48-step, `63.595 s` loop in firmware Flash.
-- Continues a running loop if the browser or USB-UART connection drops.
-- Starts, stops, and reports progress through a Web Serial page.
+- Starts its own `ESP32-S3-Switch` Wi-Fi hotspot on every boot and serves the
+  control page at <http://192.168.9.1> without a computer or internet.
+- Continues a running loop if the browser, Wi-Fi, or USB-UART connection drops.
+- Starts, stops, and reports progress through Wi-Fi HTTP or Web Serial.
 - Provides every digital controller button and D-pad direction for mouse,
   touch, and keyboard input.
 - Leaves both analog sticks centered during manual input.
@@ -39,7 +41,8 @@ USB-UART connectors.
 | Link | Board connection | Purpose |
 | --- | --- | --- |
 | Native USB | GPIO19 D- / GPIO20 D+ | Wired controller to the Switch dock |
-| USB-UART | UART0 through the onboard bridge | Browser control from the computer |
+| Wi-Fi AP | ESP32-S3 radio | Phone browser at `http://192.168.9.1` |
+| USB-UART | UART0 through the onboard bridge | Optional browser control from the computer |
 
 Both links can stay connected at the same time. See the
 [ESP32-S3-DevKitC-1 user guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.0.html)
@@ -64,19 +67,26 @@ python3 -m pip install platformio==6.1.19
 pio run
 ```
 
-The environment targets `ESP32-S3-DevKitC-1-N8`, Arduino-ESP32 2.0.17, and
+The default environment targets `ESP32-S3-DevKitC-1-N8`, Arduino-ESP32 2.0.17, and
 pins [`switch_ESP32`](https://github.com/esp32beans/switch_ESP32) to a known
-working commit. Flash through the board's USB-UART connector:
+working commit. For an ESP32-S3-N16R8 board, use `pio run -e material-farm-n16r8`
+and add `-e material-farm-n16r8` to the upload command. The build embeds the
+current files under `web/` in firmware Flash. Flash through the board's
+USB-UART connector:
 
 ```bash
 pio run -t upload --upload-port /dev/cu.usbserial-XXXX
 ```
 
-Use a port such as `COM5` on Windows or `/dev/ttyUSB0` on Linux. After flashing:
+Use a port such as `COM8` on Windows or `/dev/ttyUSB0` on Linux. After flashing:
 
 1. Connect native USB to the Nintendo Switch dock.
-2. Connect USB-UART to the computer.
-3. Start the local WebUI.
+2. On the phone, join the open `ESP32-S3-Switch` Wi-Fi network. Its local
+   address is `192.168.9.1`; the phone may say this network has no internet.
+3. Open <http://192.168.9.1> in the phone browser. The page connects to the
+   board automatically. No local server or Web Serial support is required.
+
+For optional computer control, connect USB-UART and start the local WebUI:
 
 ```bash
 npm run serve
@@ -87,12 +97,13 @@ secure context, so opening `web/index.html` directly is not supported.
 
 ## Use
 
-1. Select **连接手柄** and choose the DevKitC-1 USB-UART port.
+1. On the phone, wait for the board to connect automatically. On a computer,
+   select **连接手柄** and choose the DevKitC-1 USB-UART port.
 2. Wait for **已连接 · 待命**.
 3. Select **开始刷取**. The routine restarts at step 1 and loops until stopped.
 4. Select **停止** to immediately send a neutral controller report.
 
-Disconnecting USB-UART does not stop an already running routine. Reconnect and
+Losing Wi-Fi or USB-UART does not stop an already running routine. Reconnect and
 stop it, reset the board, or remove power when you need to end it.
 
 ### Manual controls
@@ -113,7 +124,9 @@ send the final neutral report. Reset the board to release that last state.
 
 ## Serial protocol
 
-The control link is `115200 baud`, ASCII, one command per line.
+The USB-UART control link is `115200 baud`, ASCII, one command per line. The
+onboard page sends the same commands with `POST /api/command?command=...` and
+receives a single response. Both control paths act on the same macro state.
 
 | Command | Behavior |
 | --- | --- |
@@ -146,8 +159,9 @@ Project layout:
 
 - `firmware/include/MaterialFarmMacro.h` — board-resident routine
 - `firmware/src/MacroEngine.cpp` — non-blocking loop engine
-- `firmware/src/main.cpp` — USB HID, serial protocol, and device main loop
-- `web/` — dependency-free Web Serial console
+- `firmware/src/main.cpp` — USB HID, serial/HTTP protocol, Wi-Fi, and main loop
+- `scripts/embed_web_assets.py` — compresses and embeds the web page at build time
+- `web/` — dependency-free phone HTTP and desktop Web Serial console
 - `tests/` — host-side firmware and browser-logic tests
 
 ## License and disclaimer

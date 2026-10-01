@@ -50,23 +50,12 @@ void MacroEngine::tick(uint32_t nowMs) {
     return;
   }
 
-  // The regular loop calls tick every few milliseconds. The guard prevents an
-  // abnormal multi-minute stall from spending unbounded time catching up.
-  const size_t transitionLimit = stepCount_ + 2;
-  size_t transitions = 0;
-
-  while (running_ &&
-         static_cast<uint32_t>(nowMs - phaseStartedAtMs_) >=
-             phaseDurationMs()) {
-    const uint32_t elapsedPhaseDuration = phaseDurationMs();
-    phaseStartedAtMs_ += elapsedPhaseDuration;
+  // A Wi-Fi request can stall one loop iteration. Advance only one phase per
+  // tick so a delayed loop cannot skip a short button press without sending
+  // its HID report.
+  if (static_cast<uint32_t>(nowMs - phaseStartedAtMs_) >= phaseDurationMs()) {
+    phaseStartedAtMs_ = nowMs;
     advancePhase();
-    ++transitions;
-
-    if (transitions >= transitionLimit) {
-      phaseStartedAtMs_ = nowMs;
-      break;
-    }
   }
 }
 
