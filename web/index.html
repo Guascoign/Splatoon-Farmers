@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./macro-editor.css" />
     <link rel="stylesheet" href="./xbox-panel.css" />
+    <link rel="stylesheet" href="./task-settings.css" />
   </head>
   <body>
     <div class="ambient-ink ambient-ink-teal" aria-hidden="true"></div>
@@ -34,6 +35,8 @@
             <a href="#/control" data-nav="control">网页控制</a>
             <a href="#/record" data-nav="record">宏录制</a>
             <a href="#/macros" data-nav="macros">宏设置</a>
+            <a href="#/tasks" data-nav="tasks">任务列表</a>
+            <a href="#/settings" data-nav="settings">设置</a>
           </nav>
           <button class="header-connect" type="button" data-testid="header-connect-button">连接设备</button>
         </div>
@@ -54,7 +57,7 @@
           </p>
           <div class="hero-tags" aria-label="功能摘要">
             <span>BOARD-RESIDENT</span>
-            <span data-testid="hero-steps">48 STEPS</span>
+            <span data-testid="hero-steps">DYNAMIC STEPS</span>
             <span>∞ LOOP</span>
           </div>
         </div>
@@ -103,13 +106,21 @@
               aria-label="脚本执行进度"
             ></progress>
           </div>
+          <div class="progress-block task-progress-block" data-testid="task-progress-block" hidden>
+            <div class="progress-label"><span>TASK EXECUTIONS / 任务宏执行进度</span><span data-testid="task-step-text">0%</span></div>
+            <progress data-testid="task-progress" max="1" value="0" aria-label="任务宏执行进度"></progress>
+          </div>
 
           <p class="device-detail" data-testid="detail-text">
             连接 ESP32-S3-Switch 热点，访问 http://192.168.9.1
           </p>
           <p class="error-message" data-testid="error-text" hidden></p>
 
-          <label class="console-slot-picker"><span>循环执行槽位</span><select data-testid="console-slot-select" aria-label="选择要循环执行的宏槽位"><option value="0">01 · 素材远征</option></select></label>
+          <label class="console-slot-picker"><span>循环类型</span><select data-testid="console-run-type"><option value="macro">单个宏循环</option><option value="task">任务列表循环</option></select></label>
+          <label class="console-slot-picker" data-testid="console-slot-picker"><span>循环执行槽位</span><select data-testid="console-slot-select" aria-label="选择要循环执行的宏槽位"><option value="">连接后读取宏槽位</option></select></label>
+          <label class="console-slot-picker" data-testid="console-task-picker" hidden><span>循环执行任务列表</span><select data-testid="console-task-select" aria-label="选择要循环执行的任务列表"></select></label>
+          <div class="console-run-metrics"><div><span>当前宏运行次数</span><strong data-testid="console-macro-cycles">0</strong></div><div><span>持续运行时长</span><strong data-testid="console-run-duration">00:00:00</strong></div></div>
+          <p class="console-task-progress" data-testid="console-task-progress" hidden>任务等待开始</p>
 
           <div class="controls">
             <button
@@ -128,12 +139,20 @@
               开始刷取
             </button>
             <button
+              class="button button-secondary"
+              type="button"
+              data-testid="pause-button"
+              disabled
+            >
+              暂停
+            </button>
+            <button
               class="button button-stop"
               type="button"
               data-testid="stop-button"
               disabled
             >
-              停止
+              停止任务
             </button>
           </div>
 
@@ -141,6 +160,7 @@
             手机连接 ESP32-S3-Switch 热点，访问 http://192.168.9.1
           </p>
         </section>
+        <aside class="console-task-panel"><p class="card-kicker">TASK QUEUE / 任务列表</p><h2>按顺序跑完整组。</h2><p>一个任务可以让多个宏按设定次数依次执行，完成后从头循环。</p><div data-testid="console-task-list"></div><div class="console-task-entries" data-testid="console-task-entries">选择任务后查看执行顺序与次数。</div><a href="#/tasks">配置任务列表 →</a></aside>
       </section>
 
       </div>
@@ -421,10 +441,10 @@
         <div class="xbox-heading">
           <div>
             <p class="eyebrow">GAMEPAD BRIDGE / 电脑端</p>
-            <h2 id="xbox-title">Xbox 输入，映射成 Switch 手柄。</h2>
+            <h2 id="xbox-title">Xbox / PS5 输入，映射成 Switch 手柄。</h2>
             <p>手柄先连接 Windows。网页读取手柄后，经 USB-UART 把操作送到 ESP32；结束录制后可命名并选择保存槽位。</p>
           </div>
-          <label class="xbox-device-label"><span>当前手柄</span><select data-testid="xbox-device" aria-label="选择 Xbox 手柄"></select></label>
+          <label class="xbox-device-label"><span>当前手柄</span><select data-testid="xbox-device" aria-label="选择输入手柄"></select></label>
         </div>
 
         <div class="xbox-bind-panel">
@@ -433,20 +453,21 @@
             <div class="xbox-bind-actions">
               <button type="button" data-testid="xbox-unbind" disabled>取消所选键绑定</button>
               <button type="button" data-testid="xbox-reset-bindings">恢复默认映射</button>
+              <button type="button" data-testid="xbox-export-bindings">导出映射 JSON</button>
+              <button type="button" data-testid="xbox-import-bindings">导入映射 JSON</button>
+              <input type="file" accept="application/json,.json" data-testid="xbox-bindings-file" hidden>
             </div>
           </div>
           <div class="xbox-pad-grid">
             <div class="xbox-pad-column">
-              <div class="xbox-pad-title"><span>INPUT 01</span><strong>Xbox Wireless</strong></div>
+              <div class="xbox-pad-title"><span>INPUT 01</span><strong data-testid="input-pad-name">Xbox Wireless</strong></div>
               <div class="controller-pad xbox-pad" aria-label="Xbox 手柄键位">
                 <button type="button" class="pad-key key-lt" data-source-key="LT">LT</button>
                 <button type="button" class="pad-key key-rt" data-source-key="RT">RT</button>
                 <button type="button" class="pad-key key-lb" data-source-key="LB">LB</button>
                 <button type="button" class="pad-key key-rb" data-source-key="RB">RB</button>
-                <button type="button" class="pad-key key-ls stick-key" data-source-stick="left" aria-label="Xbox 左摇杆方向"><span class="stick-dot" aria-hidden="true"></span><span class="stick-caption">左摇杆</span></button>
-                <button type="button" class="pad-key key-rs stick-key" data-source-stick="right" aria-label="Xbox 右摇杆方向"><span class="stick-dot" aria-hidden="true"></span><span class="stick-caption">右摇杆</span></button>
-                <button type="button" class="pad-key key-ls-press press-key" data-source-key="LS" aria-label="Xbox 左摇杆按下">L3</button>
-                <button type="button" class="pad-key key-rs-press press-key" data-source-key="RS" aria-label="Xbox 右摇杆按下">R3</button>
+                <button type="button" class="pad-key key-ls stick-key" data-source-stick="left" aria-label="输入左摇杆方向"><span class="stick-press-center" data-source-press="LS">L3</span><span class="stick-caption">左摇杆</span></button>
+                <button type="button" class="pad-key key-rs stick-key" data-source-stick="right" aria-label="输入右摇杆方向"><span class="stick-press-center" data-source-press="RS">R3</span><span class="stick-caption">右摇杆</span></button>
                 <button type="button" class="pad-key key-up dpad-key" data-source-key="UP">↑</button>
                 <button type="button" class="pad-key key-right dpad-key" data-source-key="RIGHT">→</button>
                 <button type="button" class="pad-key key-down dpad-key" data-source-key="DOWN">↓</button>
@@ -468,10 +489,8 @@
                 <button type="button" class="pad-key key-rt" data-target-key="ZR">ZR</button>
                 <button type="button" class="pad-key key-lb" data-target-key="L">L</button>
                 <button type="button" class="pad-key key-rb" data-target-key="R">R</button>
-                <button type="button" class="pad-key key-ls stick-key" data-target-stick="left" aria-label="Switch 左摇杆方向"><span class="stick-dot" aria-hidden="true"></span><span class="stick-caption">左摇杆</span></button>
-                <button type="button" class="pad-key key-rs stick-key" data-target-stick="right" aria-label="Switch 右摇杆方向"><span class="stick-dot" aria-hidden="true"></span><span class="stick-caption">右摇杆</span></button>
-                <button type="button" class="pad-key key-ls-press press-key" data-target-key="L_STICK_PRESS" aria-label="Switch 左摇杆按下">L3</button>
-                <button type="button" class="pad-key key-rs-press press-key" data-target-key="R_STICK_PRESS" aria-label="Switch 右摇杆按下">R3</button>
+                <button type="button" class="pad-key key-ls stick-key" data-target-stick="left" aria-label="Switch 左摇杆方向"><span class="stick-press-center" data-target-press="L_STICK_PRESS">L3</span><span class="stick-caption">左摇杆</span></button>
+                <button type="button" class="pad-key key-rs stick-key" data-target-stick="right" aria-label="Switch 右摇杆方向"><span class="stick-press-center" data-target-press="R_STICK_PRESS">R3</span><span class="stick-caption">右摇杆</span></button>
                 <button type="button" class="pad-key key-up dpad-key" data-target-key="DPAD_UP">↑</button>
                 <button type="button" class="pad-key key-right dpad-key" data-target-key="DPAD_RIGHT">→</button>
                 <button type="button" class="pad-key key-down dpad-key" data-target-key="DPAD_DOWN">↓</button>
@@ -487,7 +506,7 @@
               </div>
             </div>
           </div>
-          <p class="xbox-axis-note">摇杆圆盘显示实时方向和幅度：点击左侧圆盘，再点击右侧圆盘可交换左右摇杆。摇杆按下键请点旁边的 L3 / R3。Xbox 主键和分享键能否被网页读取取决于浏览器与驱动。</p>
+          <p class="xbox-axis-note">摇杆圆盘显示实时方向和幅度：点击圆盘绑定方向，点击圆心 L3 / R3 绑定按下键。主键和分享键能否被网页读取取决于浏览器与驱动。</p>
           <div class="xbox-binding-list" data-testid="xbox-binding-list" aria-label="当前键位映射"></div>
         </div>
 
@@ -501,10 +520,10 @@
           </div>
           <label class="xbox-record-setting"><span>画圈录制采样</span><select data-testid="xbox-record-interval"><option value="220" selected>标准 · 220 ms</option><option value="350">省步骤 · 350 ms</option><option value="80">精细 · 80 ms</option></select></label>
           <p class="xbox-record-info" data-testid="xbox-record-info" hidden></p>
-          <p class="xbox-save-note">持续推住同一方向会合并成一个动作；画圈按所选间隔采样轨迹。录制停止后预览草稿，取名并选择槽位保存；最多 128 步。</p>
+          <p class="xbox-save-note">持续推住同一方向会合并成一个动作；画圈按所选间隔采样轨迹。录制停止后预览草稿，取名并选择槽位保存，动作数量按可用存储空间决定。</p>
         </div>
       </section>
-      <section class="macro-page" data-testid="xbox-unavailable" hidden><div class="macro-page-head"><p class="eyebrow">GAMEPAD BRIDGE / 宏录制</p><h1>请用电脑浏览器<span>连接 Xbox 手柄。</span></h1><p>Xbox 输入映射与录制需要桌面版 Chrome 或 Edge 的 Gamepad API，以及连接到电脑的 USB-UART。手机可浏览宏、图片并控制板载宏。</p></div></section>
+      <section class="macro-page" data-testid="xbox-unavailable" hidden><div class="macro-page-head"><p class="eyebrow">GAMEPAD BRIDGE / 宏录制</p><h1>请用电脑浏览器<span>连接 Xbox 或 PS5 手柄。</span></h1><p>手柄输入映射与录制需要桌面版 Chrome 或 Edge 的 Gamepad API，以及连接到电脑的 USB-UART。手机可浏览宏并控制板载宏。</p></div></section>
 
       </div>
 
@@ -536,20 +555,23 @@
 
       </div>
 
+      <section class="macro-page" data-route-view="tasks" hidden><div class="macro-page-head"><p class="eyebrow">BOARD TASK / 任务列表</p><h1>多个槽位，<span>串成一条自动路线。</span></h1><p>每一步选择一个宏和执行次数；完成全部步骤后从头循环。按 Flash 空间动态创建任务列表，空间足够时可继续添加步骤。</p></div><p class="macro-message" data-testid="task-message" role="status">连接设备后读取任务列表。</p><div class="task-grid" data-testid="task-list"></div></section>
+
+      <section class="macro-page" data-route-view="settings" hidden><div class="macro-page-head"><p class="eyebrow">DEVICE SETTINGS / 设备设置</p><h1>热点和灯光，<span>在这里调整。</span></h1><p>设置保存到板载存储。关闭 WiFi 后，需通过电脑串口重新开启。</p></div><p class="macro-message" data-testid="settings-message" role="status">连接设备后读取设置。</p><form class="device-settings-form" data-testid="settings-form"><label><span>开启 WiFi 热点</span><input type="checkbox" name="wifi" checked></label><label><span>WiFi 名称</span><input name="ssid" maxlength="32" required></label><label><span>WiFi 密码（留空保持原密码）</span><input name="password" type="password" autocomplete="new-password" maxlength="63"></label><label><span>开放热点（无需密码）</span><input name="open" type="checkbox"></label><label><span>RGB 灯亮度 <b data-testid="brightness-value">14%</b></span><input name="brightness" type="range" min="0" max="255" value="36"></label><button type="submit" class="button button-primary">保存设备设置</button></form><div class="settings-backup"><strong>完整配置</strong><span>导出或恢复设备设置、宏和任务列表。</span><div><button class="button button-secondary" type="button" data-testid="export-all-config">一键导出全部配置</button><button class="button button-secondary" type="button" data-testid="import-all-config">一键导入全部配置</button><input type="file" accept="application/json,.json" data-testid="all-config-file" hidden></div></div><div class="settings-share"><strong>按分享 ID 更新宏</strong><span>输入分享服务返回的 ID，网页会读取宏 JSON 并覆盖到下一个空槽位。</span><div><input data-testid="share-api-url" placeholder="分享服务地址（默认当前站点 /api/share）"><input data-testid="share-id-input" placeholder="分享 ID"><button class="button button-secondary" type="button" data-testid="share-import">读取并覆盖槽位</button></div></div><div class="device-stats"><div class="stats-title"><h2>运行统计</h2><button type="button" data-testid="refresh-stats">刷新统计</button></div><div data-testid="settings-stats">连接后显示统计信息。</div><p>固件版本：<strong data-testid="firmware-version">V1.0</strong></p></div></section>
+
       <section class="macro-page" data-route-view="macros" hidden aria-labelledby="macros-title">
         <div class="macro-page-head">
           <p class="eyebrow">BOARD MACRO / 板载宏</p>
-          <h1 id="macros-title">十二格宏位，<span>整轮都在板上跑。</span></h1>
-          <p>从录制或 JSON 创建宏，命名后保存到槽位。每格可保存配装图片；断开网页后，宏与图片仍在板载 Flash。</p>
+          <h1 id="macros-title">宏槽位，<span>整轮都在板上跑。</span></h1>
+          <p>从录制或 JSON 创建宏，命名后保存到槽位。断开网页后，宏仍保存在板载 Flash。</p>
         </div>
         <p class="macro-message" data-testid="macro-list-message" role="status">连接设备后读取宏槽位。</p>
-        <div class="macro-storage"><div><strong>宏与配装图存储空间</strong><span data-testid="macro-storage-label">连接设备后读取</span></div><progress data-testid="macro-storage-progress" max="100" value="0" aria-label="宏存储占用率"></progress></div>
+        <div class="macro-storage"><div><strong>宏存储空间</strong><span data-testid="macro-storage-label">连接设备后读取</span></div><progress data-testid="macro-storage-progress" max="100" value="0" aria-label="宏存储占用率"></progress></div>
         <div class="macro-import-bar"><label><span>导入到槽位</span><select data-testid="macro-import-slot" aria-label="选择 JSON 导入目标槽位"></select></label><button class="button button-secondary" type="button" data-testid="macro-import-json">导入 JSON</button><input type="file" accept="application/json,.json" data-testid="macro-import-file" hidden></div>
         <div class="macro-slot-grid" data-testid="macro-slot-list"></div>
-        <input type="file" accept="image/*" data-testid="macro-list-image-file" hidden>
         <div class="macro-tip">
           <strong>Flash 覆盖规则</strong>
-          <p>第 01 槽默认使用固件内置宏；保存后优先运行 Flash 版本。其余槽位由用户创建。图片上传会压缩为 JPEG，单张最多 64 KiB，并计入槽位占用。</p>
+          <p>所有宏都由用户创建并保存到 Flash；存储空间会按实际占用统计。</p>
         </div>
         <button class="button button-secondary" type="button" data-testid="macro-format-button" hidden>初始化宏存储</button>
       </section>
@@ -578,18 +600,16 @@
           <div class="macro-steps-head"><h2>动作列表</h2><span>点击动作展开微调</span></div>
           <div class="macro-step-list" data-testid="macro-step-list"></div>
           </fieldset>
-          <div class="macro-image-editor"><div><strong>配装图片</strong><p>可以上传配装截图并保存到此槽位；导出 JSON 时会一并包含图片。</p></div><img data-testid="macro-edit-image" alt="当前槽位的配装图片" hidden><div class="macro-image-actions"><button class="button button-secondary" type="button" data-testid="macro-edit-image-view">查看图片</button><button class="button button-secondary" type="button" data-testid="macro-edit-image-upload">选择图片</button><button class="button button-stop" type="button" data-testid="macro-edit-image-remove">删除图片</button></div><input type="file" accept="image/*" data-testid="macro-edit-image-file" hidden></div>
           <div class="macro-editor-actions">
             <button class="button button-secondary" type="button" data-testid="macro-discard-recording" hidden>放弃录制草稿</button>
             <button class="button button-secondary" type="button" data-testid="macro-add-step">＋ 添加动作</button>
-            <button class="button button-stop" type="button" data-testid="macro-restore">恢复内置</button>
+            <button class="button button-stop" type="button" data-testid="macro-restore">清空此槽宏</button>
             <button class="button button-secondary" type="button" data-testid="macro-export-json">导出 JSON</button>
             <button class="button button-primary" type="button" data-testid="macro-save">保存到槽位</button>
           </div>
         </div>
       </section>
 
-      <div class="macro-image-modal" data-testid="macro-image-modal" hidden><div class="macro-image-modal-card"><div><strong data-testid="macro-image-modal-title">配装图片</strong><button type="button" data-testid="macro-image-modal-close" aria-label="关闭图片预览">×</button></div><img data-testid="macro-image-modal-image" alt="槽位配装图片"></div></div>
 
       <footer>
         <span>SPLATOON FARMERS · UNOFFICIAL FAN PROJECT</span>

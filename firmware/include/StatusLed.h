@@ -8,6 +8,7 @@ namespace farmers {
 class StatusLed {
  public:
   void begin();
+  void setBrightness(uint8_t brightness);
   void notifyOutput();
   void update(uint32_t nowMs, bool running, bool controlConnected,
               uint8_t paletteIndex);
@@ -22,6 +23,7 @@ class StatusLed {
   uint8_t lastRed_ = 0xff;
   uint8_t lastGreen_ = 0xff;
   uint8_t lastBlue_ = 0xff;
+  uint8_t brightness_ = 36;
 };
 
 }  // namespace farmers

@@ -7,7 +7,6 @@ namespace farmers {
 namespace {
 
 constexpr uint8_t kLedPin = 48;
-constexpr uint8_t kBrightness = 36;
 constexpr uint32_t kStartupRedMs = 850;
 constexpr uint32_t kOutputPulseMs = 100;
 
@@ -31,23 +30,22 @@ bool before(uint32_t nowMs, uint32_t deadlineMs) {
   return static_cast<int32_t>(nowMs - deadlineMs) < 0;
 }
 
-uint8_t scaled(uint8_t channel) {
-  return static_cast<uint8_t>((static_cast<uint16_t>(channel) * kBrightness +
-                               127u) /
-                              255u);
-}
-
 }  // namespace
 
 void StatusLed::show(uint8_t red, uint8_t green, uint8_t blue) {
-  red = scaled(red);
-  green = scaled(green);
-  blue = scaled(blue);
+  red = static_cast<uint8_t>((static_cast<uint16_t>(red) * brightness_ + 127u) / 255u);
+  green = static_cast<uint8_t>((static_cast<uint16_t>(green) * brightness_ + 127u) / 255u);
+  blue = static_cast<uint8_t>((static_cast<uint16_t>(blue) * brightness_ + 127u) / 255u);
   if (red == lastRed_ && green == lastGreen_ && blue == lastBlue_) return;
   lastRed_ = red;
   lastGreen_ = green;
   lastBlue_ = blue;
   neopixelWrite(kLedPin, red, green, blue);
+}
+
+void StatusLed::setBrightness(uint8_t brightness) {
+  brightness_ = brightness;
+  lastRed_ = lastGreen_ = lastBlue_ = 0xff;
 }
 
 void StatusLed::begin() {

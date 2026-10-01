@@ -27,9 +27,12 @@ class MacroEngine {
                  bool repeat);
   void start(uint32_t nowMs);
   void stop();
+  bool pause(uint32_t nowMs);
+  bool resume(uint32_t nowMs);
   void tick(uint32_t nowMs);
 
   bool running() const;
+  bool paused() const;
   MacroPhase phase() const;
   size_t stepIndex() const;
   uint32_t cycleCount() const;
@@ -47,9 +50,11 @@ class MacroEngine {
   bool repeat_;
 
   bool running_;
+  bool paused_;
   MacroPhase phase_;
   size_t stepIndex_;
   uint32_t phaseStartedAtMs_;
+  uint32_t pausedAtMs_;
   uint32_t cycleCount_;
   ControllerReport report_;
   bool reportChanged_;

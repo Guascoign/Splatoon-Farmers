@@ -1,4 +1,4 @@
-export const DEVICE_BAUD_RATE = 115200;
+export const DEVICE_BAUD_RATE = 921600;
 
 const DEVICE_ERRORS = Object.freeze({
   "macro-running": "请先停止刷取，再修改宏。",
@@ -11,16 +11,16 @@ const DEVICE_ERRORS = Object.freeze({
   "missing-macro-step": "宏传输不完整，请重试。",
   "macro-checksum": "宏校验失败，请重试保存。",
   "macro-save-failed": "写入 Flash 失败，原有宏仍保留。",
-  "restore-failed": "恢复内置宏失败。",
+  "restore-failed": "清空槽位宏失败。",
   "invalid-slot": "槽位编号无效。",
   "macro-empty": "该槽位还没有宏。",
   "invalid-macro-name": "宏名称无效，请缩短名称或移除控制字符。",
-  "invalid-image-begin": "图片大小或目标槽位无效。",
-  "image-upload-failed": "无法在板载存储中创建图片，请检查剩余空间。",
-  "invalid-image-chunk": "图片传输数据无效，请重试。",
-  "image-commit-failed": "图片校验或写入失败，原图片仍保留。",
-  "image-read-failed": "无法读取板载配装图片。",
-  "image-delete-failed": "删除配装图片失败。",
+  "invalid-task": "任务列表无效，或引用的宏槽位不可用。",
+  "task-save-failed": "任务列表写入板载存储失败。",
+  "task-delete-failed": "任务列表删除失败。",
+  "invalid-settings": "设备设置无效，请检查名称、密码和亮度。",
+  "settings-save-failed": "设备设置保存失败。",
+  "slot-delete-failed": "槽位宏删除失败。",
 });
 
 export function parseDeviceLine(rawLine) {

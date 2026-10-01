@@ -2,7 +2,7 @@ import {
   axisDifference, DEFAULT_BINDINGS, DEFAULT_STICK_BINDINGS, describeReport,
   digitalChanged, NEUTRAL_REPORT, normalizedBindings, normalizedStickBindings,
   reportCommand, SWITCH_KEYS, XBOX_KEYS, XboxRecorder,
-  xboxGamepads, xboxPressedKeys, xboxToReport,
+  controllerType, xboxGamepads, xboxPressedKeys, xboxToReport,
 } from "./xbox-input.js";
 
 const BINDINGS_KEY = "splatoon-farmers-xbox-bindings-v1";
@@ -20,13 +20,13 @@ const KEY_LABELS = Object.freeze({
 
 function label(key) { return KEY_LABELS[key] || key; }
 
-function savedBindings() {
-  try { return normalizedBindings(JSON.parse(localStorage.getItem(BINDINGS_KEY))); }
+function savedBindings(profile = "xbox") {
+  try { return normalizedBindings(JSON.parse(localStorage.getItem(profile === "xbox" ? BINDINGS_KEY : `${BINDINGS_KEY}-${profile}`))); }
   catch { return { ...DEFAULT_BINDINGS }; }
 }
 
-function savedStickBindings() {
-  try { return normalizedStickBindings(JSON.parse(localStorage.getItem(STICK_BINDINGS_KEY))); }
+function savedStickBindings(profile = "xbox") {
+  try { return normalizedStickBindings(JSON.parse(localStorage.getItem(profile === "xbox" ? STICK_BINDINGS_KEY : `${STICK_BINDINGS_KEY}-${profile}`))); }
   catch { return { ...DEFAULT_STICK_BINDINGS }; }
 }
 
@@ -64,6 +64,7 @@ export class XboxPanel {
     this.stopping = false;
     this.stopTask = Promise.resolve();
     this.recorder = new XboxRecorder();
+    this.activeProfile = "xbox";
     this.bindings = savedBindings();
     this.stickBindings = savedStickBindings();
     this.selectedSource = null;
@@ -89,6 +90,10 @@ export class XboxPanel {
     this.bindingList = document.querySelector('[data-testid="xbox-binding-list"]');
     this.unbindButton = document.querySelector('[data-testid="xbox-unbind"]');
     this.resetButton = document.querySelector('[data-testid="xbox-reset-bindings"]');
+    this.exportButton = document.querySelector('[data-testid="xbox-export-bindings"]');
+    this.importButton = document.querySelector('[data-testid="xbox-import-bindings"]');
+    this.importFile = document.querySelector('[data-testid="xbox-bindings-file"]');
+    this.padName = document.querySelector('[data-testid="input-pad-name"]');
     this.panel.hidden = !enabled;
 
     this.panel.addEventListener("click", (event) => {
@@ -96,7 +101,11 @@ export class XboxPanel {
       const targetStick = event.target.closest("[data-target-stick]")?.dataset.targetStick;
       const source = event.target.closest("[data-source-key]")?.dataset.sourceKey;
       const target = event.target.closest("[data-target-key]")?.dataset.targetKey;
-      if (sourceStick) this.selectStick(sourceStick);
+      const sourcePress = event.target.closest("[data-source-press]")?.dataset.sourcePress;
+      const targetPress = event.target.closest("[data-target-press]")?.dataset.targetPress;
+      if (sourcePress) this.selectSource(sourcePress);
+      else if (targetPress) this.bindTarget(targetPress);
+      else if (sourceStick) this.selectStick(sourceStick);
       else if (targetStick) this.bindStickTarget(targetStick);
       else if (source) this.selectSource(source);
       else if (target) this.bindTarget(target);
@@ -114,9 +123,13 @@ export class XboxPanel {
       this.bindingHint.textContent = "已恢复同位置映射：Xbox A → Switch B，左右摇杆各自对应。";
       this.renderBindings();
     });
+    this.exportButton.addEventListener("click", () => this.exportBindings());
+    this.importButton.addEventListener("click", () => this.importFile.click());
+    this.importFile.addEventListener("change", () => this.importBindings());
 
     this.selector.addEventListener("change", () => {
       this.selectedIndex = this.selector.value === "" ? null : Number(this.selector.value);
+      this.useProfile(controllerType(this.selectedPad()) || "xbox");
       this.lastReport = NEUTRAL_REPORT;
       this.render();
     });
@@ -136,23 +149,86 @@ export class XboxPanel {
 
   get recording() { return this.recorder.active; }
 
+  sourceName() { return this.activeProfile === "ps5" ? "PS5" : "Xbox"; }
+
+  sourceLabel(key) {
+    if (this.activeProfile !== "ps5") return label(key);
+    return ({ A: "×", B: "○", X: "□", Y: "△", LB: "L1", RB: "R1",
+      LT: "L2", RT: "R2", VIEW: "Create", MENU: "Options",
+      GUIDE: "PS", SHARE: "触控板", LS: "L3", RS: "R3" })[key] || label(key);
+  }
+
   selectedPad(devices = xboxGamepads()) {
     return devices.find((pad) => pad.index === this.selectedIndex) || null;
   }
 
   persistBindings() {
     try {
-      localStorage.setItem(BINDINGS_KEY, JSON.stringify(this.bindings));
-      localStorage.setItem(STICK_BINDINGS_KEY, JSON.stringify(this.stickBindings));
+      localStorage.setItem(this.activeProfile === "xbox" ? BINDINGS_KEY : `${BINDINGS_KEY}-${this.activeProfile}`, JSON.stringify(this.bindings));
+      localStorage.setItem(this.activeProfile === "xbox" ? STICK_BINDINGS_KEY : `${STICK_BINDINGS_KEY}-${this.activeProfile}`, JSON.stringify(this.stickBindings));
     }
     catch { this.bindingHint.textContent = "浏览器未允许保存键位；本次页面中仍可使用。"; }
+  }
+
+  useProfile(profile) {
+    if (profile === this.activeProfile) return;
+    this.activeProfile = profile;
+    this.bindings = savedBindings(profile);
+    this.stickBindings = savedStickBindings(profile);
+    this.selectedSource = null;
+    this.selectedStick = null;
+    this.padName.textContent = profile === "ps5" ? "PS5 DualSense" : "Xbox Wireless";
+    this.panel.querySelectorAll(".xbox-pad .face-key").forEach((button) => {
+      const ps5 = { A: "×", B: "○", X: "□", Y: "△" };
+      button.textContent = profile === "ps5" ? ps5[button.dataset.sourceKey] : button.dataset.sourceKey;
+    });
+    this.bindingHint.textContent = `已切换到 ${profile === "ps5" ? "PS5 DualSense" : "Xbox"} 键位配置。`;
+    this.renderBindings();
+  }
+
+  exportBindings() {
+    const profiles = {};
+    for (const profile of ["xbox", "ps5"]) profiles[profile] = {
+      buttons: profile === this.activeProfile ? this.bindings : savedBindings(profile),
+      sticks: profile === this.activeProfile ? this.stickBindings : savedStickBindings(profile),
+    };
+    const blob = new Blob([JSON.stringify({ format: "splatoon-farmers-controller-bindings", version: 1, profiles }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "switch-controller-mapping.json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async importBindings() {
+    const file = this.importFile.files?.[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (data.format !== "splatoon-farmers-controller-bindings" || data.version !== 1 ||
+          !data.profiles || typeof data.profiles !== "object") throw new Error("不是支持的手柄映射文件。");
+      for (const profile of ["xbox", "ps5"]) {
+        const values = data.profiles[profile];
+        if (!values) continue;
+        const buttons = normalizedBindings(values.buttons);
+        const sticks = normalizedStickBindings(values.sticks);
+        localStorage.setItem(profile === "xbox" ? BINDINGS_KEY : `${BINDINGS_KEY}-${profile}`, JSON.stringify(buttons));
+        localStorage.setItem(profile === "xbox" ? STICK_BINDINGS_KEY : `${STICK_BINDINGS_KEY}-${profile}`, JSON.stringify(sticks));
+      }
+      this.bindings = savedBindings(this.activeProfile);
+      this.stickBindings = savedStickBindings(this.activeProfile);
+      this.bindingHint.textContent = "映射 JSON 已导入。";
+      this.renderBindings();
+    } catch (error) { this.bindingHint.textContent = error.message; }
+    this.importFile.value = "";
   }
 
   selectSource(source) {
     if (!XBOX_KEYS.includes(source)) return;
     this.selectedSource = source;
     this.selectedStick = null;
-    this.bindingHint.textContent = `Xbox ${label(source)} 当前对应 Switch ${label(this.bindings[source]) || "未绑定"}；点击右侧键位改绑。`;
+    this.bindingHint.textContent = `${this.sourceName()} ${this.sourceLabel(source)} 当前对应 Switch ${label(this.bindings[source]) || "未绑定"}；点击右侧键位改绑。`;
     this.renderBindings();
   }
 
@@ -160,13 +236,13 @@ export class XboxPanel {
     if (side !== "left" && side !== "right") return;
     this.selectedSource = null;
     this.selectedStick = side;
-    this.bindingHint.textContent = `Xbox ${stickName(side)} 当前对应 Switch ${stickName(this.stickBindings[side])}；点击右侧摇杆圆盘改绑。`;
+    this.bindingHint.textContent = `${this.sourceName()} ${stickName(side)} 当前对应 Switch ${stickName(this.stickBindings[side])}；点击右侧摇杆圆盘改绑。`;
     this.renderBindings();
   }
 
   bindStickTarget(target) {
     if (!this.selectedStick) {
-      this.bindingHint.textContent = "请先点击左侧的 Xbox 摇杆圆盘。";
+      this.bindingHint.textContent = "请先点击左侧的输入摇杆圆盘。";
       return;
     }
     if (target !== null && target !== "left" && target !== "right") return;
@@ -180,14 +256,14 @@ export class XboxPanel {
     this.selectedStick = null;
     this.persistBindings();
     this.bindingHint.textContent = target
-      ? `已绑定：Xbox ${stickName(source)} → Switch ${stickName(target)}。`
-      : `已取消 Xbox ${stickName(source)} 的摇杆方向输出。`;
+      ? `已绑定：${this.sourceName()} ${stickName(source)} → Switch ${stickName(target)}。`
+      : `已取消 ${this.sourceName()} ${stickName(source)} 的摇杆方向输出。`;
     this.renderBindings();
   }
 
   bindTarget(target) {
     if (!this.selectedSource) {
-      this.bindingHint.textContent = "请先点击左侧的 Xbox 键位。";
+      this.bindingHint.textContent = "请先点击左侧的输入键位。";
       return;
     }
     if (target !== null && !SWITCH_KEYS.includes(target)) return;
@@ -196,8 +272,8 @@ export class XboxPanel {
     this.selectedSource = null;
     this.persistBindings();
     this.bindingHint.textContent = target
-      ? `已绑定：Xbox ${label(source)} → Switch ${label(target)}。`
-      : `已取消 Xbox ${label(source)} 的输出。`;
+      ? `已绑定：${this.sourceName()} ${this.sourceLabel(source)} → Switch ${label(target)}。`
+      : `已取消 ${this.sourceName()} ${this.sourceLabel(source)} 的输出。`;
     this.renderBindings();
   }
 
@@ -205,7 +281,7 @@ export class XboxPanel {
     this.unbindButton.disabled = !this.selectedSource && !this.selectedStick;
     for (const button of this.panel.querySelectorAll("[data-source-key]")) {
       button.dataset.selected = String(button.dataset.sourceKey === this.selectedSource);
-      button.title = `Xbox ${label(button.dataset.sourceKey)} → Switch ${label(this.bindings[button.dataset.sourceKey]) || "未绑定"}`;
+      button.title = `${this.sourceName()} ${this.sourceLabel(button.dataset.sourceKey)} → Switch ${label(this.bindings[button.dataset.sourceKey]) || "未绑定"}`;
     }
     for (const button of this.panel.querySelectorAll("[data-target-key]")) {
       button.dataset.mapped = String(Boolean(this.selectedSource &&
@@ -214,7 +290,14 @@ export class XboxPanel {
     for (const button of this.panel.querySelectorAll("[data-source-stick]")) {
       const side = button.dataset.sourceStick;
       button.dataset.selected = String(side === this.selectedStick);
-      button.title = `Xbox ${stickName(side)} → Switch ${stickName(this.stickBindings[side])}`;
+      button.title = `${this.sourceName()} ${stickName(side)} → Switch ${stickName(this.stickBindings[side])}`;
+    }
+    for (const center of this.panel.querySelectorAll("[data-source-press]")) {
+      center.dataset.selected = String(center.dataset.sourcePress === this.selectedSource);
+    }
+    for (const center of this.panel.querySelectorAll("[data-target-press]")) {
+      center.dataset.mapped = String(this.selectedSource &&
+        center.dataset.targetPress === this.bindings[this.selectedSource]);
     }
     for (const button of this.panel.querySelectorAll("[data-target-stick]")) {
       button.dataset.mapped = String(Boolean(this.selectedStick &&
@@ -228,7 +311,7 @@ export class XboxPanel {
     });
     chips.push(...XBOX_KEYS.map((source) => {
       const chip = document.createElement("span");
-      chip.textContent = `${label(source)} → ${label(this.bindings[source]) || "未绑定"}`;
+      chip.textContent = `${this.sourceLabel(source)} → ${label(this.bindings[source]) || "未绑定"}`;
       chip.dataset.selected = String(source === this.selectedSource);
       return chip;
     }));
@@ -244,6 +327,12 @@ export class XboxPanel {
     }
     for (const button of this.panel.querySelectorAll("[data-target-key]")) {
       button.dataset.active = String(targets.has(button.dataset.targetKey));
+    }
+    for (const center of this.panel.querySelectorAll("[data-source-press]")) {
+      center.dataset.active = String(active.has(center.dataset.sourcePress));
+    }
+    for (const center of this.panel.querySelectorAll("[data-target-press]")) {
+      center.dataset.active = String(targets.has(center.dataset.targetPress));
     }
     const sourceReport = pad
       ? xboxToReport(pad, DEFAULT_BINDINGS, DEFAULT_STICK_BINDINGS) : NEUTRAL_REPORT;
@@ -264,7 +353,7 @@ export class XboxPanel {
     const previous = this.selectedIndex;
     this.selector.replaceChildren();
     if (!devices.length) {
-      const option = new Option("未检测到 Xbox 手柄，请按任意键", "");
+      const option = new Option("未检测到 Xbox / PS5 手柄，请按任意键", "");
       this.selector.add(option);
       this.selectedIndex = null;
     } else {
@@ -274,6 +363,7 @@ export class XboxPanel {
       this.selectedIndex = devices.some((pad) => pad.index === previous)
         ? previous : devices[0].index;
       this.selector.value = String(this.selectedIndex);
+      this.useProfile(controllerType(devices.find((pad) => pad.index === this.selectedIndex)) || "xbox");
     }
     this.render();
   }
@@ -292,7 +382,7 @@ export class XboxPanel {
       if (this.active) {
         const now = performance.now();
         if (this.recorder.active && !this.recorder.record(report, now)) {
-          this.stop("已达到 128 步上限；录制结束，请检查草稿。");
+          this.stop("录制无法继续，请检查当前草稿或设备存储空间。");
         } else if (this.active) {
           const digitalEdge = digitalChanged(report, this.lastReport);
           const analogChanged = axisDifference(report, this.lastReport) >= 8;
@@ -343,7 +433,7 @@ export class XboxPanel {
     this.lastAnalogSendAt = this.lastHeartbeatAt;
     this.onState(true);
     this.queueReport(this.lastReport);
-    this.status.textContent = "直通中 · Xbox 输入正送往 Switch";
+    this.status.textContent = `直通中 · ${this.activeProfile === "ps5" ? "PS5" : "Xbox"} 输入正送往 Switch`;
     this.output.textContent = describeReport(this.lastReport);
     this.render();
   }
@@ -396,7 +486,7 @@ export class XboxPanel {
   renderRecordingInfo() {
     if (!this.recorder.active) return;
     const seconds = ((performance.now() - this.recorder.startedAt) / 1000).toFixed(1);
-    this.recordInfo.textContent = `${seconds} 秒 · 已记录 ${this.recorder.steps.length + 1}/128 步`;
+    this.recordInfo.textContent = `${seconds} 秒 · 已记录 ${this.recorder.steps.length + 1} 步`;
   }
 
   render() {
@@ -415,7 +505,7 @@ export class XboxPanel {
     } else if (!this.isFirmwareReady()) {
       this.status.textContent = "请先烧录支持手柄直通的 1.3.0 固件。";
     } else if (!this.devicesSignature) {
-      this.status.textContent = "等待 Xbox 手柄：先在 Windows 中连接，再按手柄任意键。";
+      this.status.textContent = "等待 Xbox / PS5 手柄：先在电脑中连接，再按手柄任意键。";
     } else if (/^(先连接|请先烧录|等待 Xbox)/.test(this.status.textContent)) {
       this.status.textContent = "手柄已识别，可开始直通。";
     }

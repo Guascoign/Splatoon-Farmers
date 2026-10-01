@@ -1,5 +1,5 @@
 import { BUTTON_BITS } from "./manual-input.js";
-import { MAX_MACRO_STEPS, MAX_STEP_MS, MIN_STEP_MS } from "./macro-editor.js";
+import { MAX_STEP_MS, MIN_STEP_MS } from "./macro-editor.js";
 
 export const NEUTRAL_REPORT = Object.freeze({
   buttons: 0, dpad: 15, leftX: 128, leftY: 128, rightX: 128, rightY: 128,
@@ -50,10 +50,16 @@ export function normalizedStickBindings(raw) {
   return result;
 }
 
+export function controllerType(pad) {
+  if (/dualsense|wireless controller|sony|054c|ps5/i.test(pad?.id || "")) return "ps5";
+  if (/xbox|microsoft|045e|xinput/i.test(pad?.id || "")) return "xbox";
+  return null;
+}
+
 export function xboxGamepads() {
   if (typeof navigator.getGamepads !== "function") return [];
   return [...(navigator.getGamepads() || [])].filter((pad) => pad?.connected &&
-    pad.mapping === "standard" && /xbox|microsoft|045e|xinput/i.test(pad.id));
+    pad.mapping === "standard" && controllerType(pad));
 }
 
 function pressed(button) {
@@ -166,7 +172,6 @@ export class XboxRecorder {
   appendUntil(now) {
     let duration = Math.max(MIN_STEP_MS, Math.round(now - this.since));
     while (duration > 0) {
-      if (this.steps.length >= MAX_MACRO_STEPS) return false;
       const part = Math.min(MAX_STEP_MS, duration);
       this.steps.push({ durationMs: part, ...this.current });
       duration -= part;
@@ -182,9 +187,7 @@ export class XboxRecorder {
     if (!digitalEdge && !stickStartedOrStopped &&
         (axisDifference(report, this.current) < 20 ||
          (!force && now - this.since < this.sampleIntervalMs))) return true;
-    // Reserve one final step for the state currently held by the controller.
-    if (this.steps.length >= MAX_MACRO_STEPS - 1) return false;
-    if (!this.appendUntil(now) || this.steps.length >= MAX_MACRO_STEPS) return false;
+    if (!this.appendUntil(now)) return false;
     this.current = { ...report };
     this.hasAction ||= !reportsEqual(report, NEUTRAL_REPORT);
     return true;

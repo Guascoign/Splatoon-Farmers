@@ -25,6 +25,7 @@
 .macro-slot-id { display:grid; width:70px; height:70px; place-content:center; border:2px solid var(--yellow); border-radius:18px; color:var(--yellow); text-align:center; transform:rotate(-5deg); }
 .macro-slot-id small { font-size:.6rem; letter-spacing:.18em; }
 .macro-slot-id strong { font-size:1.8rem; line-height:1.15; }
+.macro-slot-id em { display:block; margin-top:3px; color:var(--paper-muted); font-size:.58rem; font-style:normal; font-weight:900; }
 .macro-slot-main .eyebrow { margin:0 0 5px; }
 .macro-slot-main h2 { margin:0 0 9px; font-size:clamp(1.2rem,2vw,1.6rem); }
 .macro-slot-main > span { display:inline-block; padding:5px 9px; border-radius:999px; background:rgba(245,223,33,.12); color:var(--yellow); font-size:.72rem; font-weight:900; }
@@ -37,6 +38,7 @@
 .macro-slot-actions { display:grid; gap:7px; justify-items:stretch; }
 .macro-slot-actions button { padding:7px 10px; border:1px solid #3b7163; border-radius:8px; background:#123c32; color:var(--paper); font-size:.72rem; font-weight:800; cursor:pointer; }
 .macro-slot-actions button:disabled { opacity:.4; cursor:not-allowed; }
+.macro-slot-actions button.macro-danger { border-color:#a84a42; color:#ffb6a9; background:#3a1b1a; }
 .macro-slot-usage { display:block; margin-top:8px; color:var(--paper-muted); font-size:.7rem; }
 .macro-storage { display:grid; gap:10px; margin-bottom:18px; padding:17px 20px; border:1px solid var(--line); border-radius:16px; background:#0b2c24; }
 .macro-storage > div { display:flex; justify-content:space-between; gap:12px; font-size:.85rem; }
@@ -100,17 +102,6 @@
 .macro-mini-button:disabled { opacity:.35; cursor:not-allowed; }
 .macro-mini-button.danger { border-color:#83483d; color:#ffb6a9; }
 .macro-editor-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:20px; padding-top:20px; border-top:1px solid var(--line); }
-.macro-image-editor { display:grid; grid-template-columns:minmax(150px,1fr) minmax(130px,220px) auto; align-items:center; gap:20px; margin-top:24px; padding:19px; border:1px solid var(--line); border-radius:14px; background:#08231d; }
-.macro-image-editor strong { color:var(--yellow); }
-.macro-image-editor p { margin:7px 0 0; color:var(--paper-muted); font-size:.76rem; line-height:1.5; }
-.macro-image-editor img { max-width:220px; max-height:140px; object-fit:contain; border-radius:9px; }
-.macro-image-actions { display:grid; gap:8px; }
-.macro-image-actions .button { min-width:105px; }
-.macro-image-modal { position:fixed; inset:0; z-index:100; display:grid; place-items:center; padding:22px; background:rgba(0,12,9,.85); }
-.macro-image-modal-card { width:min(96vw,900px); max-height:90vh; padding:18px; border:1px solid var(--teal); border-radius:18px; background:#08221d; box-shadow:0 24px 80px rgba(0,0,0,.5); }
-.macro-image-modal-card > div { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
-.macro-image-modal-card button { width:34px; height:34px; border:1px solid var(--line); border-radius:50%; background:#143d32; color:var(--paper); font-size:1.3rem; cursor:pointer; }
-.macro-image-modal-card img { display:block; max-width:100%; max-height:calc(90vh - 90px); margin:auto; object-fit:contain; }
 
 @media(max-width:980px) {
   .macro-slot-card { grid-template-columns:70px 1fr auto; }
@@ -129,8 +120,6 @@
   .macro-slot-facts { grid-column:1 / -1; grid-row:auto; }
   .macro-enter { width:100%; }
   .macro-slot-actions { grid-column:1 / -1; grid-row:auto; display:flex; flex-wrap:wrap; }
-  .macro-image-editor { grid-template-columns:1fr; }
-  .macro-image-actions { display:flex; flex-wrap:wrap; }
   .macro-editor-card { padding:16px; }
   .macro-step-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .macro-step-fields .duration-field { grid-column:span 2; }
@@ -148,3 +137,7 @@
   .macro-step summary strong { font-size:.68rem; }
   .macro-editor-actions .button { width:100%; }
 }
+.macro-slot-meta { display:block; margin-top:6px; color:var(--teal); font-size:.68rem; line-height:1.45; word-break:break-word; }
+.macro-slot-empty-card { align-items:center; border-style:dashed; background:rgba(30,224,189,.04); }
+.macro-slot-empty-card p { margin:6px 0 0; color:var(--paper-muted); font-size:.8rem; }
+.macro-empty-state { padding:25px; border:1px dashed var(--line); border-radius:16px; color:var(--paper-muted); }

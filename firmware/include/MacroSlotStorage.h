@@ -2,59 +2,54 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <vector>
 
 #include "MacroEngine.h"
 
 namespace farmers {
 
-constexpr size_t kMaxSlotSteps = 128;
-constexpr uint8_t kMacroSlotCount = 12;
 constexpr size_t kMaxSlotNameBytes = 48;
-constexpr uint32_t kMaxSlotImageBytes = 65536;
 constexpr uint32_t kMinSlotStepMs = 10;
 constexpr uint32_t kMaxSlotStepMs = 600000;
 constexpr uint32_t kMaxSlotLoopGapMs = 600000;
 constexpr uint8_t kSlotColorCount = 6;
 
 struct SlotMacro {
-  MacroStep steps[kMaxSlotSteps];
-  uint16_t stepCount = 0;
+  // Macro steps are stored in a variable-length record. The vector is sized
+  // when a record is loaded or staged; remaining Flash/heap is the practical
+  // limit rather than a compile-time step count.
+  std::vector<MacroStep> steps;
   uint32_t loopGapMs = 0;
   uint8_t color = 0;
   char name[kMaxSlotNameBytes + 1] = {};
+  uint32_t updatedAt = 0;
+  uint64_t shareId = 0;
 };
 
 struct SlotStorageSummary {
+  uint32_t slot = 0;
   bool hasMacro = false;
   size_t usedBytes = 0;
-  size_t imageBytes = 0;
-  uint32_t imageSize = 0;
+  uint32_t updatedAt = 0;
+  uint64_t shareId = 0;
 };
 
 bool isSlotMacroValid(const SlotMacro& macro);
 uint32_t slotMacroDurationMs(const SlotMacro& macro);
 uint32_t slotMacroChecksum(const SlotMacro& macro);
 
-// Each slot has a primary and backup file. Slot 0 also has the compiled
-// routine as its fallback. Mounting never formats the partition.
+// Each slot has a primary and backup file. Mounting never formats the
+// partition.
 class MacroSlotStorage {
  public:
   bool begin();
   bool ready() const;
-  bool load(uint8_t slot, SlotMacro* macro) const;
-  bool save(uint8_t slot, const SlotMacro& macro);
-  bool restore(uint8_t slot);
-  bool imageInfo(uint8_t slot, uint32_t* bytes) const;
-  bool beginImage(uint8_t slot, uint32_t bytes, uint32_t checksum);
-  bool appendImageHex(const char* hex);
-  bool commitImage();
-  void abortImage();
-  bool readImageChunk(uint8_t slot, uint32_t offset, char* hex,
-                      size_t hexCapacity, size_t* bytesRead) const;
-  bool removeImage(uint8_t slot);
-  size_t slotUsedBytes(uint8_t slot) const;
-  size_t slotImageUsedBytes(uint8_t slot) const;
-  bool summarize(SlotStorageSummary* slots, size_t count) const;
+  bool load(uint32_t slot, SlotMacro* macro) const;
+  bool save(uint32_t slot, const SlotMacro& macro);
+  bool restore(uint32_t slot);
+  size_t slotUsedBytes(uint32_t slot) const;
+  bool summarize(std::vector<SlotStorageSummary>* slots) const;
+  uint32_t nextSlot() const;
   size_t usedBytes() const;
   size_t totalBytes() const;
   bool load(SlotMacro* macro) const { return load(0, macro); }

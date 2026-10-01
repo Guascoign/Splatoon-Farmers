@@ -1,5 +1,5 @@
-// Browser demo data mirrors the compiled material-farm routine. Real devices
-// always provide their current Flash or builtin macro through MACRO_GET.
+// Legacy browser demo data retained for older mock fixtures. Real devices
+// provide only user-saved Flash macros through MACRO_GET.
 const REPORTS = {
   N: [0, 15, 128, 128, 128, 128],
   A: [4, 15, 128, 128, 128, 128],

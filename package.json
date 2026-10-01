@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "test": "npm run test:firmware && npm run test:web",
-    "test:firmware": "c++ -std=c++17 -Wall -Wextra -Werror -pedantic -I firmware/include firmware/src/MacroEngine.cpp tests/firmware/test_macro_engine.cpp -o /tmp/splatoon-farmers-macro-test && /tmp/splatoon-farmers-macro-test",
+    "test:firmware": "node scripts/test-firmware.mjs",
     "test:web": "node --test tests/web/*.test.mjs tests/data/*.test.mjs",
     "serve": "python3 -m http.server 4173 --directory web"
   }

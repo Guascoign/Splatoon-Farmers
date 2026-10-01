@@ -9,9 +9,11 @@ MacroEngine::MacroEngine(const MacroStep* steps, size_t stepCount,
       loopGapMs_(loopGapMs),
       repeat_(repeat),
       running_(false),
+      paused_(false),
       phase_(MacroPhase::kIdle),
       stepIndex_(0),
       phaseStartedAtMs_(0),
+      pausedAtMs_(0),
       cycleCount_(0),
       report_(kNeutralReport),
       reportChanged_(false) {}
@@ -26,6 +28,7 @@ void MacroEngine::configure(const MacroStep* steps, size_t stepCount,
 }
 
 void MacroEngine::start(uint32_t nowMs) {
+  paused_ = false;
   cycleCount_ = 0;
   stepIndex_ = 0;
   phaseStartedAtMs_ = nowMs;
@@ -47,6 +50,7 @@ void MacroEngine::start(uint32_t nowMs) {
 
 void MacroEngine::stop() {
   running_ = false;
+  paused_ = false;
   phase_ = MacroPhase::kIdle;
   stepIndex_ = 0;
   setReport(kNeutralReport);
@@ -54,8 +58,32 @@ void MacroEngine::stop() {
   reportChanged_ = true;
 }
 
+bool MacroEngine::pause(uint32_t nowMs) {
+  if (!running_ || paused_) return false;
+  paused_ = true;
+  pausedAtMs_ = nowMs;
+  setReport(kNeutralReport);
+  // Release a held button or stick even if the active report was neutral.
+  reportChanged_ = true;
+  return true;
+}
+
+bool MacroEngine::resume(uint32_t nowMs) {
+  if (!running_ || !paused_) return false;
+  phaseStartedAtMs_ += static_cast<uint32_t>(nowMs - pausedAtMs_);
+  paused_ = false;
+  if (phase_ == MacroPhase::kSteps) {
+    setReport(steps_[stepIndex_].report);
+  } else {
+    setReport(kNeutralReport);
+  }
+  // Resume the same step with its remaining time, including its HID output.
+  reportChanged_ = true;
+  return true;
+}
+
 void MacroEngine::tick(uint32_t nowMs) {
-  if (!running_) {
+  if (!running_ || paused_) {
     return;
   }
 
@@ -69,6 +97,8 @@ void MacroEngine::tick(uint32_t nowMs) {
 }
 
 bool MacroEngine::running() const { return running_; }
+
+bool MacroEngine::paused() const { return paused_; }
 
 MacroPhase MacroEngine::phase() const { return phase_; }
 

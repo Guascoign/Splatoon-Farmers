@@ -34,6 +34,9 @@
 .pad-key.stick-key { width:61px; height:61px; border-color:#738f82; background:radial-gradient(circle at 40% 35%,#546c62,#1b302a 66%); font-size:.69rem; }
 .stick-key::before { content:""; position:absolute; inset:8px; border:1px dashed rgba(201,232,219,.35); border-radius:50%; pointer-events:none; }
 .stick-key .stick-dot { position:absolute; top:42%; left:50%; width:20px; height:20px; border:2px solid #b9e6d7; border-radius:50%; background:radial-gradient(circle at 34% 28%,#b9d4c5,#38584c 62%,#203a32); box-shadow:0 3px 8px rgba(0,0,0,.4); transform:translate(calc(-50% + var(--stick-x,0px)),calc(-50% + var(--stick-y,0px))); transition:transform 35ms linear; pointer-events:none; }
+.stick-key .stick-press-center { position:absolute; top:42%; left:50%; display:grid; place-items:center; width:26px; height:26px; border:2px solid #b9e6d7; border-radius:50%; background:#244b3e; color:#fff; font-size:.58rem; font-weight:900; transform:translate(calc(-50% + var(--stick-x,0px)),calc(-50% + var(--stick-y,0px))); transition:transform 35ms linear; pointer-events:auto; }
+.stick-press-center[data-selected="true"],.stick-press-center[data-mapped="true"] { border-color:var(--yellow); background:#786a12; }
+.stick-press-center[data-active="true"] { border-color:#42ffb7; background:#0cab75; box-shadow:0 0 16px #42ffb7; }
 .stick-key .stick-caption { position:absolute; bottom:4px; left:0; right:0; color:#d1e7dd; font-size:.57rem; font-weight:800; text-shadow:0 1px 3px #00160f; pointer-events:none; }
 .stick-key[data-active="true"] .stick-dot { border-color:#e5ff7e; background:radial-gradient(circle at 34% 28%,#efffb2,#5eaa6b 65%,#206d50); }
 .pad-key.press-key { width:26px; height:26px; border-color:#99b4a8; font-size:.58rem; }

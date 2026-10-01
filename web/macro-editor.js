@@ -1,9 +1,6 @@
 import { BUTTON_BITS } from "./manual-input.js";
 
-export const MAX_MACRO_STEPS = 128;
-export const MACRO_SLOT_COUNT = 12;
 export const MAX_MACRO_NAME_BYTES = 48;
-export const MAX_SLOT_IMAGE_BYTES = 65536;
 export const MIN_STEP_MS = 10;
 export const MAX_STEP_MS = 600000;
 export const MAX_LOOP_GAP_MS = 600000;
@@ -37,10 +34,12 @@ export function createBlankStep() {
 export function normalizeMacro(message) {
   const steps = Array.isArray(message?.steps) ? message.steps : [];
   return {
-    source: message.source === "flash" ? "flash" : "builtin",
+    source: message.source === "flash" ? "flash" : "empty",
     name: String(message.name ?? "素材远征"),
     loopGapMs: Number(message.loop_gap_ms ?? message.loopGapMs ?? 0),
     color: Number(message.color ?? 0),
+    updatedAt: Number(message.updated_at ?? message.updatedAt ?? 0),
+    shareId: String(message.share_id ?? message.shareId ?? ""),
     steps: steps.map((values) => {
       if (Array.isArray(values)) {
         const [durationMs, buttons, dpad, leftX, leftY, rightX, rightY] = values;
@@ -63,9 +62,8 @@ export function validateMacro(macro) {
       /[\u0000-\u001f\u007f]/.test(name)) {
     return "宏名称不能为空，且最多 48 字节（约 16 个汉字）。";
   }
-  if (!Array.isArray(macro.steps) || macro.steps.length < 1 ||
-      macro.steps.length > MAX_MACRO_STEPS) {
-    return `宏必须有 1–${MAX_MACRO_STEPS} 个动作。`;
+  if (!Array.isArray(macro.steps) || macro.steps.length < 1) {
+    return "宏至少需要包含一个动作。";
   }
   if (!Number.isInteger(macro.loopGapMs) || macro.loopGapMs < 0 ||
       macro.loopGapMs > MAX_LOOP_GAP_MS) {
@@ -104,7 +102,9 @@ function checksum32(checksum, value) {
 
 // Must match firmware/src/MacroSlotStorage.cpp field and byte order.
 export function macroChecksum(macro) {
-  let checksum = checksum16(2166136261, macro.steps.length);
+  // The wire/storage format uses a 32-bit step count so records can grow
+  // until Flash/heap space is exhausted instead of wrapping at 65535 steps.
+  let checksum = checksum32(2166136261, macro.steps.length);
   checksum = checksum32(checksum, macro.loopGapMs);
   checksum = checksumByte(checksum, macro.color);
   for (const step of macro.steps) {
